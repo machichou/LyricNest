@@ -16,9 +16,9 @@ import yaml
 from opencc import OpenCC
 from rapidfuzz import fuzz
 
-from .clean import fold, has_offset, is_placeholder, last_stamp, sung_lines
+from .clean import T2S, fold, has_offset, is_placeholder, last_stamp, sung_lines
 
-T2S, S2T = OpenCC("t2s"), OpenCC("s2t")
+S2T = OpenCC("s2t")
 UA = "LyricsTool/1.0 (personal library, slow)"
 MAX_DIFF = 3
 SUSPEND_SECONDS = 600
@@ -44,6 +44,11 @@ class Query:
     path: str
     names: list
     titles: list
+
+    @property
+    def search_title(self):
+        """Without live/version noise, when that differs from the tag."""
+        return self.titles[1] if len(self.titles) > 1 else self.titles[0]
 
 
 @dataclass
@@ -254,9 +259,8 @@ class OnlineLrclib:
             return Hit(self.label, instrumental=True, matched_artist=d.get("artistName", ""), matched_title=d.get("trackName", ""), matched_length=d.get("duration") or 0)
         if d and usable(d.get("syncedLyrics"), q.length):
             return Hit(self.label, d["syncedLyrics"], matched_artist=d.get("artistName", ""), matched_title=d.get("trackName", ""), matched_length=d.get("duration") or 0)
-        title = q.titles[1] if len(q.titles) > 1 else q.titles[0]
         for n in dict.fromkeys([q.artist, name]):
-            for x in self._get("search", {"artist_name": n, "track_name": title}) or []:
+            for x in self._get("search", {"artist_name": n, "track_name": q.search_title}) or []:
                 if not x.get("instrumental") and matches(q, x.get("artistName", ""), x.get("trackName", ""), x.get("duration")) and usable(x.get("syncedLyrics"), q.length):
                     return Hit(self.label, x["syncedLyrics"], matched_artist=x["artistName"], matched_title=x["trackName"], matched_length=x["duration"])
         return None
@@ -277,10 +281,9 @@ class NetEase:
         return self.lim.call(fetch)
 
     def find(self, q):
-        title = q.titles[1] if len(q.titles) > 1 else q.titles[0]
         instrumental = None
         for name in q.names[:2]:
-            d = self._get("https://music.163.com/api/search/get/web?" + urllib.parse.urlencode({"s": f"{name} {title}", "type": 1, "limit": 20}))
+            d = self._get("https://music.163.com/api/search/get/web?" + urllib.parse.urlencode({"s": f"{name} {q.search_title}", "type": 1, "limit": 20}))
             for s in (d.get("result") or {}).get("songs") or []:
                 art = "/".join(a["name"] for a in s.get("artists") or []) + " " + " ".join(s.get("alias") or [])
                 dur = (s.get("duration") or 0) / 1000
@@ -303,9 +306,8 @@ class Kugou:
         self.lim = Limiter("酷狗", 2.0, [15], ctx)
 
     def find(self, q):
-        title = q.titles[1] if len(q.titles) > 1 else q.titles[0]
         for name in q.names[:2]:
-            url = "https://krcs.kugou.com/search?" + urllib.parse.urlencode({"ver": 1, "man": "yes", "client": "pc", "keyword": f"{name} {title}", "duration": int(q.length * 1000), "hash": ""})
+            url = "https://krcs.kugou.com/search?" + urllib.parse.urlencode({"ver": 1, "man": "yes", "client": "pc", "keyword": f"{name} {q.search_title}", "duration": int(q.length * 1000), "hash": ""})
             k = self.lim.call(lambda: _get_json(url)) or {}
             for cand in (k.get("candidates") or [])[:12]:
                 if not matches(q, cand.get("singer") or "", cand.get("song") or "", (cand.get("duration") or 0) / 1000):

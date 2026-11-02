@@ -15,6 +15,7 @@ create table if not exists items(id integer primary key, path text, kind text, s
     matched text, matched_length real, base_hash text, selected int default 1, state text default 'pending', at real, unique(path, kind));
 create index if not exists items_state on items(state);
 """
+WHY_SQL = "case when t.state in('unsupported','unreadable') then t.state else coalesce(l.status,'never') end why"
 
 
 def data_dir():
@@ -101,16 +102,13 @@ class Store:
 
     def reasons(self):
         """Tracks without synced lyrics, by what lookups said about them."""
-        rows = self.db.execute("""select case when t.state='unsupported' then 'unsupported' when t.state='unreadable' then 'unreadable'
-                                  else coalesce(l.status,'never') end why, count(*) n
-                                  from tracks t left join lookups l on l.path=t.path where t.state<>'synced' group by why""")
+        rows = self.db.execute(f"select {WHY_SQL}, count(*) n from tracks t left join lookups l on l.path=t.path where t.state<>'synced' group by why")
         return {r["why"]: r["n"] for r in rows}
 
     def tracks_in(self, states):
         """Everything the overview's song lists show, without the lyrics: those add up to megabytes, and only one song at a time needs them."""
         marks = ",".join("?" * len(states))
-        return self.db.execute(f"""select t.path,t.ext,t.size,t.artist,t.album_artist,t.title,t.album,t.length,t.state,t.error,t.quality,l.source,l.at,
-                                   case when t.state in('unsupported','unreadable') then t.state else coalesce(l.status,'never') end why
+        return self.db.execute(f"""select t.path,t.ext,t.size,t.artist,t.album_artist,t.title,t.album,t.length,t.state,t.error,t.quality,l.source,l.at,{WHY_SQL}
                                    from tracks t left join lookups l on l.path=t.path where t.state in({marks}) order by t.artist,t.album,t.path""", states).fetchall()
 
     def missing_rows(self):

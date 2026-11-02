@@ -255,7 +255,7 @@ class App:
         top = ttk.Frame(f)
         top.pack(fill="x", pady=(0, 8))
         self.v_kind = tk.StringVar(value="全部")
-        kind = ttk.Combobox(top, textvariable=self.v_kind, values=("全部", "新歌詞", "清理製作名單"), state="readonly", width=12)
+        kind = ttk.Combobox(top, textvariable=self.v_kind, values=("全部", *jobs.KIND_NAMES.values()), state="readonly", width=12)
         kind.pack(side="left")
         kind.bind("<<ComboboxSelected>>", lambda e: self.fill_review())
         self.v_flagged = tk.BooleanVar(value=False)
@@ -617,7 +617,7 @@ class App:
 
     # ---- review list ----
     def visible_rows(self):
-        kind = {"新歌詞": "new", "清理製作名單": "cleanup"}.get(self.v_kind.get())
+        kind = {name: k for k, name in jobs.KIND_NAMES.items()}.get(self.v_kind.get())
         needle = self.v_search.get().strip().lower()
         out = []
         for r in self.review_rows:
@@ -636,7 +636,7 @@ class App:
         self.tree.delete(*self.tree.get_children())
         for r in self.visible_rows():
             iid = str(r["id"])
-            self.tree.insert("", "end", iid=iid, values=("☑" if r["selected"] else "☐", r["artist"], r["title"], "新歌詞" if r["kind"] == "new" else "清理製作名單", r["source"], r["lines"], jobs.action_text(r)),
+            self.tree.insert("", "end", iid=iid, values=("☑" if r["selected"] else "☐", r["artist"], r["title"], jobs.KIND_NAMES[r["kind"]], r["source"], r["lines"], jobs.action_text(r)),
                              tags=("flag",) if json.loads(r["flags"]) else ())
             if iid in keep:
                 self.tree.selection_add(iid)

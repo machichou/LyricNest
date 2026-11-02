@@ -14,6 +14,7 @@ from .store import text_hash
 
 log = logging.getLogger("lyricstool")
 MAX_PASSES = 3
+KIND_NAMES = {"new": "新歌詞", "cleanup": "清理製作名單"}
 
 
 class Ctx:
@@ -377,7 +378,7 @@ def export_review(rows, path):
         w = csv.writer(fh)
         w.writerow(["勾選", "行為類型", "歌手", "歌名", "專輯", "來源", "比對結果", "行數", "標記", "刪除的內容", "路徑"])
         for r in rows:
-            w.writerow(["是" if r["selected"] else "否", "新歌詞" if r["kind"] == "new" else "清理製作名單", r["artist"], r["title"], r["album"], r["source"], r["matched"], r["lines"],
+            w.writerow(["是" if r["selected"] else "否", KIND_NAMES[r["kind"]], r["artist"], r["title"], r["album"], r["source"], r["matched"], r["lines"],
                         "；".join(json.loads(r["flags"])), " | ".join(json.loads(r["removed"])), r["path"]])
 
 
