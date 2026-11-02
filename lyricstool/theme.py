@@ -39,14 +39,17 @@ def _on_line(x, y, points, half):
     return min(max(0.5 + half - nearest, 0), 1)
 
 
-def _photo(root, w, h, pixels):
+def png_bytes(w, h, pixels):
     """`pixels` is w by h RGB triples, row by row."""
     def chunk(tag, data):
         return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data))
 
     raw = b"".join(b"\0" + bytes(pixels[y * w * 3:(y + 1) * w * 3]) for y in range(h))
-    png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
-    return tk.PhotoImage(master=root, data=base64.b64encode(png).decode())
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
+
+
+def _photo(root, w, h, pixels):
+    return tk.PhotoImage(master=root, data=base64.b64encode(png_bytes(w, h, pixels)).decode())
 
 
 def _pixels(w, h, radius, fill, border=None, line=1, on=BG, mark=None, gap=0):

@@ -9,10 +9,9 @@ import subprocess
 import sys
 import time
 
-from winshot import save_window
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from lyricstool import __author__, __version__
+from winshot import save_window
 
 exe, scratch = sys.argv[1:3]
 shutil.rmtree(scratch, ignore_errors=True)

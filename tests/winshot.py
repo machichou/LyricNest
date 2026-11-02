@@ -2,7 +2,7 @@
 import ctypes
 import ctypes.wintypes as wt
 
-from PIL import Image
+from lyricstool.theme import png_bytes
 
 
 class BitmapInfo(ctypes.Structure):
@@ -22,7 +22,10 @@ def save_window(hwnd, path):
     u.PrintWindow(hwnd, mem, 2)  # 2 = PW_RENDERFULLCONTENT
     buf = ctypes.create_string_buffer(w * h * 4)
     g.GetDIBits(mem, bmp, 0, h, buf, ctypes.byref(BitmapInfo(ctypes.sizeof(BitmapInfo), w, -h, 1, 32, 0, 0, 0, 0, 0, 0)), 0)
-    Image.frombuffer("RGBA", (w, h), buf, "raw", "BGRA", 0, 1).convert("RGB").save(path)
+    bgra, rgb = buf.raw, bytearray(w * h * 3)
+    rgb[0::3], rgb[1::3], rgb[2::3] = bgra[2::4], bgra[1::4], bgra[0::4]
+    with open(path, "wb") as fh:
+        fh.write(png_bytes(w, h, rgb))
     g.DeleteObject(bmp)
     g.DeleteDC(mem)
     u.ReleaseDC(hwnd, dc)

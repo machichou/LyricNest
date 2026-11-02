@@ -11,9 +11,9 @@ import tkinter as tk
 import tkinter.ttk
 from unittest import mock
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from winshot import save_window
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 out = sys.argv[1]
 os.makedirs(out, exist_ok=True)
 d = tempfile.mkdtemp()
