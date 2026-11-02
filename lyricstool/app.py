@@ -16,7 +16,7 @@ from .theme import BG, DANGER, FONT, LINE, MUTED, STATE_COLORS, WARN_BG
 
 log = logging.getLogger("lyricstool")
 WHY = {"never": "尚未查詢", "found": "已找到，待審閱", "notfound": "查無歌詞", "instrumental": "來源標示為純音樂或無歌詞", "dismissed": "已從清單移除",
-       "busy": "來源忙碌，待重新查詢", "error": "查詢失敗，待重新查詢", "unsupported": "不支援寫入此格式", "unreadable": "檔案損壞或無法讀取"}
+       "busy": "來源忙碌，待重新查詢", "unsupported": "不支援寫入此格式", "unreadable": "檔案損壞或無法讀取"}
 CARDS = {"synced": ("同步歌詞（動態顯示）", ("synced",)), "plain": ("僅有純文字歌詞", ("plain",)), "none": ("沒有歌詞", ("none",)), "other": ("不支援或已損壞", ("unsupported", "unreadable"))}
 CARD_COLUMNS = (("歌手", 100, True), ("歌名", 150, True), ("狀況", 170, False), ("專輯", 100, True), ("格式", 50, False), ("音質", 100, False))
 
@@ -495,7 +495,7 @@ class App:
     def statuses(self):
         out = []
         if self.v_never.get():
-            out += ["never", "busy", "error"]
+            out += ["never", "busy"]
         if self.v_notfound.get():
             out += ["notfound", "dismissed"]
         if self.v_instr.get():

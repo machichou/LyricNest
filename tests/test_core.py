@@ -405,7 +405,7 @@ class Files(unittest.TestCase):
         jobs.run_scan(store, cfg, ctx)
         with mock.patch.object(jobs, "build_sources", lambda c, x: [Refuses()]):
             self.assertEqual(jobs.run_lookup(store, cfg, ctx), {"busy": 3})
-        self.assertEqual(len(store.lookup_targets(("never", "busy", "error"))), 3)
+        self.assertEqual(len(store.lookup_targets(("never", "busy"))), 3)
 
     def test_exports_can_be_read_back(self):
         store, cfg, ctx = Store(os.path.join(self.d, "s.sqlite")), self.config(), jobs.Ctx()

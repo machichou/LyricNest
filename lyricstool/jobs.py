@@ -207,7 +207,7 @@ def retry_wait(queue):
     return max([60] + [s.lim.suspended_until - now for _, failed in queue for s in failed if hasattr(s, "lim")])
 
 
-def run_lookup(store, cfg, ctx, statuses=("never", "busy", "error"), text=""):
+def run_lookup(store, cfg, ctx, statuses=("never", "busy"), text=""):
     """Throttled tracks are asked again at the end, up to MAX_PASSES rounds, without anyone rerunning anything."""
     every = store.lookup_targets(statuses, text)
     targets = [t for t in every if t["title"] and (t["artist"] or t["album_artist"])]
@@ -285,7 +285,7 @@ def run_write(store, cfg, ctx):
         ctx.progress(n - 1, len(items), os.path.basename(path))
         reason = stale_reason(store, cfg, it)
         if reason:
-            store.set_item_state(it["id"], "stale", reason)
+            store.set_item_state(it["id"], "stale")
             if reason == "檔案已被替換":
                 store.save_lookup(path, "never")
             result["stale"].append((path, reason))
@@ -296,7 +296,7 @@ def run_write(store, cfg, ctx):
             log.exception("write failed: %s", path)
             result["failed"].append((path, str(e)))
             continue
-        store.set_item_state(it["id"], "written", folder)
+        store.set_item_state(it["id"], "written")
         result["ok"] += 1
         st = os.stat(path)
         scan_one(store, path, os.path.splitext(path)[1].lower(), st)

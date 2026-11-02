@@ -12,7 +12,7 @@ create table if not exists tracks(path text primary key, ext text, size int, mti
 create index if not exists tracks_state on tracks(state);
 create table if not exists lookups(path text primary key, status text, source text, at real);
 create table if not exists items(id integer primary key, path text, kind text, source text, lrc text, removed text, flags text, lines int,
-    matched text, matched_length real, base_hash text, selected int default 1, state text default 'pending', detail text, at real, unique(path, kind));
+    matched text, matched_length real, base_hash text, selected int default 1, state text default 'pending', at real, unique(path, kind));
 create index if not exists items_state on items(state);
 """
 
@@ -141,14 +141,14 @@ class Store:
         old = self.db.execute("select state,base_hash,lrc from items where path=? and kind=?", (path, kind)).fetchone()
         if old and old["state"] in ("dismissed", "pending") and old["base_hash"] == base_hash and old["lrc"] == lrc:
             return old["state"]
-        self.db.execute("""insert or replace into items(path,kind,source,lrc,removed,flags,lines,matched,matched_length,base_hash,selected,state,detail,at)
-                           values(?,?,?,?,?,?,?,?,?,?,1,'pending','',?)""",
+        self.db.execute("""insert or replace into items(path,kind,source,lrc,removed,flags,lines,matched,matched_length,base_hash,selected,state,at)
+                           values(?,?,?,?,?,?,?,?,?,?,1,'pending',?)""",
                         (path, kind, source, lrc, json.dumps(removed, ensure_ascii=False), json.dumps(flags, ensure_ascii=False), lines, matched, matched_length, base_hash, time.time()))
         self.db.commit()
         return "added"
 
     def pending_items(self):
-        return self.db.execute("""select i.*,t.artist,t.title,t.album,t.length,t.lyrics existing,t.state track_state from items i join tracks t on t.path=i.path
+        return self.db.execute("""select i.*,t.artist,t.title,t.album,t.length,t.state track_state from items i join tracks t on t.path=i.path
                                   where i.state='pending' order by i.kind,t.artist,t.album,t.path""").fetchall()
 
     def selected_items(self):
@@ -158,8 +158,8 @@ class Store:
         self.db.executemany("update items set selected=? where id=?", [(int(value), i) for i in ids])
         self.db.commit()
 
-    def set_item_state(self, item_id, state, detail=""):
-        self.db.execute("update items set state=?,detail=? where id=?", (state, detail, item_id))
+    def set_item_state(self, item_id, state):
+        self.db.execute("update items set state=? where id=?", (state, item_id))
         self.db.commit()
 
     def drop_pending(self, path, kind):
