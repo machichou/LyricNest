@@ -3,4 +3,3 @@ opencc-python-reimplemented==0.1.7
 rapidfuzz==3.14.6
 PyYAML==6.0.3
 pyinstaller
-pillow
