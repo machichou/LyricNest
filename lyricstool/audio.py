@@ -3,6 +3,7 @@ import csv
 import hashlib
 import io
 import os
+import pathlib
 import time
 
 import mutagen
@@ -132,16 +133,19 @@ def embedded(data, ext):
     return uslt[0] if uslt else ""
 
 
-def _read(path):
+def _patiently(action):
     """A player or virus scanner can hold a file for a moment; only a lock that lasts counts as failure."""
     for attempt in range(4):
         try:
-            with open(path, "rb") as fh:
-                return fh.read()
+            return action()
         except PermissionError:
             if attempt == 3:
                 raise WriteError("檔案被其他程式占用（可能正在播放或上傳）")
             time.sleep(0.5 * (attempt + 1))
+
+
+def _read(path):
+    return _patiently(pathlib.Path(path).read_bytes)
 
 
 def _replace(path, data):
@@ -152,14 +156,7 @@ def _replace(path, data):
             fh.write(data)
             fh.flush()
             os.fsync(fh.fileno())
-        for attempt in range(4):
-            try:
-                os.replace(tmp, path)
-                return
-            except PermissionError:
-                if attempt == 3:
-                    raise WriteError("檔案被其他程式占用（可能正在播放或上傳）")
-                time.sleep(0.5 * (attempt + 1))
+        _patiently(lambda: os.replace(tmp, path))
     finally:
         if os.path.exists(tmp):
             os.remove(tmp)
