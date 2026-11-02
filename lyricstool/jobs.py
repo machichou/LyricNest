@@ -8,7 +8,7 @@ import threading
 import time
 
 from . import audio
-from .clean import clean_lrc, fold, is_synced, last_stamp, lyric_state, strip_credits, sung_lines
+from .clean import clean_lrc, is_synced, last_stamp, lyric_state, squash, strip_credits, sung_lines
 from .sources import Busy, build_sources, make_query
 from .store import text_hash
 
@@ -110,7 +110,6 @@ def run_scan(store, cfg, ctx):
         else:
             n_clean = 0
             store.db.execute("delete from items where state='pending' and kind='cleanup'")
-        store.commit()
         ctx.log(f"掃描完成：{len(paths)} 首，更新 {changed} 首，移除 {len(gone)} 首，建議清理製作名單 {n_clean} 首")
     store.commit()
 
@@ -150,7 +149,7 @@ def flags_for(track, hit, cleaned):
         flags.append("歌詞在歌曲中段前就結束")
     if any("*" in line for line in sung_lines(cleaned.lrc)):
         flags.append("部分文字被遮蔽（*）")
-    if fold(hit.matched_title).replace(" ", "") != fold(track["title"]).replace(" ", ""):
+    if squash(hit.matched_title) != squash(track["title"]):
         flags.append("歌名不完全相同")
     if track["state"] == "plain":
         flags.append("會取代純文字歌詞")

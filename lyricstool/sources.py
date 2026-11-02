@@ -139,7 +139,7 @@ def _get_json(url, **headers):
         if e.code == 404:
             return None
         raise Retry() from e
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ConnectionError, OSError) as e:
+    except (OSError, json.JSONDecodeError) as e:
         raise Retry() from e
 
 

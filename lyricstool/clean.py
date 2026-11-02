@@ -1,7 +1,7 @@
 """Text rules: turn raw LRC from any source into what gets embedded, and spot credit lines in lyrics already embedded."""
 import re
 import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from opencc import OpenCC
 
@@ -94,10 +94,10 @@ def is_placeholder(lrc):
 
 @dataclass
 class Cleaned:
-    lrc: str = ""
-    removed: list = field(default_factory=list)
-    sung: int = 0
-    converted: bool = False
+    lrc: str
+    removed: list
+    sung: int
+    converted: bool
 
 
 def _is_header(seconds, text, index, title, names):

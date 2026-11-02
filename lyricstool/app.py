@@ -638,8 +638,6 @@ class App:
         return out
 
     def fill_review(self):
-        if not hasattr(self, "tree"):
-            return
         self.review_rows = self.store.pending_items()
         keep = set(self.tree.selection())
         self.tree.delete(*self.tree.get_children())
@@ -814,8 +812,7 @@ class App:
         self.fill_card_list()
         self.count_targets()
         self.fill_review()
-        if self.nb.select() == str(self.tab_backup):
-            self.fill_backups()
+        self.on_tab()
 
     def draw_stack(self):
         c = self.stack
