@@ -4,7 +4,6 @@ import hashlib
 import json
 import os
 import shutil
-import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -313,7 +312,7 @@ class Files(unittest.TestCase):
                 audio.write_lyrics(target, LRC + "\n[00:40.00]多一行", None)
         self.assertEqual(open(target, "rb").read(), before)
 
-    def test_quality_is_read_and_older_databases_catch_up(self):
+    def test_quality_is_read_for_every_kind_of_file(self):
         flac, mp3, wav, broken = (os.path.join(self.lib, n) for n in ("a.flac", "b.mp3", "x.wav", "y.ogg"))
         self.assertEqual(audio.read_info(flac)["quality"], "16/44.1kHz")
         self.assertRegex(audio.read_info(mp3)["quality"], r"^\d+kbps/44\.1kHz$")
@@ -323,21 +322,11 @@ class Files(unittest.TestCase):
             w.setframerate(96000)
             w.writeframes(b"\0\0\0" * 960)
         open(broken, "wb").close()
-        path = os.path.join(self.d, "old.sqlite")
-        st = os.stat(flac)
-        old = sqlite3.connect(path)
-        old.execute("create table tracks(path text primary key, ext text, size int, mtime real, artist text, album_artist text, title text, album text, length real, state text, lyrics text, error text)")
-        old.execute("insert into tracks values(?,?,?,?,?,?,?,?,?,?,?,?)", (flac, ".flac", st.st_size, st.st_mtime, "歌手", "", "歌名", "", 2.0, "plain", "old words", ""))
-        old.commit()
-        old.close()
-        store = Store(path)
-        self.assertIsNone(store.track(flac)["quality"])
+        store = Store(os.path.join(self.d, "s.sqlite"))
         jobs.run_scan(store, self.config(), jobs.Ctx())
-        self.assertEqual(store.track(flac)["quality"], "16/44.1kHz", "unchanged on disk, but read again for the new column")
-        self.assertEqual(store.known_files()[flac], (st.st_size, st.st_mtime))
+        self.assertEqual(store.track(flac)["quality"], "16/44.1kHz")
         self.assertEqual((store.track(wav)["quality"], store.track(wav)["state"]), ("24/96.0kHz", "unsupported"))
         self.assertEqual(store.track(broken)["quality"], "")
-        self.assertEqual(store.known_files()[broken], (0, os.stat(broken).st_mtime), "a file with no quality to read is not read again every scan")
 
     def test_defaults_assume_nothing_about_the_computer(self):
         with mock.patch.dict(os.environ, {"LYRICSTOOL_DATA": self.d}):

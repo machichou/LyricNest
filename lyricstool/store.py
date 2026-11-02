@@ -67,8 +67,6 @@ class Store:
         self.path = path or os.path.join(data_dir(), "state.sqlite")
         self._local = threading.local()
         self.db.executescript(SCHEMA)
-        if "quality" not in [r["name"] for r in self.db.execute("pragma table_info(tracks)")]:  # a database from before this column
-            self.db.execute("alter table tracks add column quality text")
 
     @property
     def db(self):
@@ -85,8 +83,7 @@ class Store:
         return self.db.execute("select * from tracks where path=?", (path,)).fetchone()
 
     def known_files(self):
-        """Size and time of each track. Tracks saved before quality was recorded get None, so the next scan reads them again."""
-        return {r["path"]: None if r["quality"] is None else (r["size"], r["mtime"]) for r in self.db.execute("select path,size,mtime,quality from tracks")}
+        return {r["path"]: (r["size"], r["mtime"]) for r in self.db.execute("select path,size,mtime from tracks")}
 
     def put_track(self, path, ext, size, mtime, info, state, error=""):
         self.db.execute("insert or replace into tracks values(?,?,?,?,?,?,?,?,?,?,?,?,?)",
