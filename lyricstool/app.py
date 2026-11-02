@@ -181,8 +181,8 @@ class App:
         lists.rowconfigure(1, weight=1)
         ttk.Label(lists, text="缺少同步歌詞的原因", style="Title.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 6))
         ttk.Label(lists, text="查無歌詞最多的歌手", style="Title.TLabel").grid(row=0, column=1, sticky="w", padx=(12, 0), pady=(0, 6))
-        self.reason_tree = self.simple_tree(lists, ("原因", "首數"), (300, 70), 1, 0)
-        self.artist_tree = self.simple_tree(lists, ("歌手", "首數"), (300, 70), 1, 1, padx=(12, 0))
+        self.reason_tree = self.simple_tree(lists, "原因", 0)
+        self.artist_tree = self.simple_tree(lists, "歌手", 1, padx=(12, 0))
         self.build_card_list(f)
 
     def build_card_list(self, f):
@@ -200,10 +200,7 @@ class App:
         pane = ttk.PanedWindow(self.card_view, orient="horizontal")
         pane.pack(fill="both", expand=True)
         left = self.card(pane)
-        self.card_tree = ttk.Treeview(left, columns=[c[0] for c in CARD_COLUMNS], show="headings", selectmode="browse")
-        for name, _, stretch in CARD_COLUMNS:
-            self.card_tree.heading(name, text=name, anchor="w")
-            self.card_tree.column(name, anchor="w", stretch=stretch)
+        self.card_tree = self.make_tree(left, CARD_COLUMNS, "browse")
         self.fill_with_scrollbar(self.card_tree)
         self.card_tree.bind("<<TreeviewSelect>>", self.show_track)
         pane.add(left, weight=3)
@@ -212,13 +209,18 @@ class App:
         pane.add(right, weight=2)
         self.card_rows = {}
 
-    def simple_tree(self, parent, cols, widths, row, col, padx=0):
+    def make_tree(self, parent, columns, selectmode):
+        """`columns` are (name, width, stretch)."""
+        t = ttk.Treeview(parent, columns=[c[0] for c in columns], show="headings", selectmode=selectmode)
+        for name, width, stretch in columns:
+            t.heading(name, text=name, anchor="w")
+            t.column(name, width=self.px(width), anchor="w", stretch=stretch)
+        return t
+
+    def simple_tree(self, parent, first_column, col, padx=0):
         wrap = self.card(parent)
-        wrap.grid(row=row, column=col, sticky="nsew", padx=padx)
-        t = ttk.Treeview(wrap, columns=cols, show="headings", selectmode="none")
-        for c, w in zip(cols, widths):
-            t.heading(c, text=c, anchor="w")
-            t.column(c, width=self.px(w), anchor="w", stretch=c == cols[0])
+        wrap.grid(row=1, column=col, sticky="nsew", padx=padx)
+        t = self.make_tree(wrap, ((first_column, 300, True), ("首數", 70, False)), "none")
         t.pack(fill="both", expand=True)
         return t
 
@@ -270,11 +272,7 @@ class App:
         pane = ttk.PanedWindow(f, orient="horizontal")
         pane.pack(fill="both", expand=True)
         left = self.card(pane)
-        cols = ("✓", "歌手", "歌名", "行為類型", "來源", "行數", "行為")
-        self.tree = ttk.Treeview(left, columns=cols, show="headings", selectmode="extended")
-        for c, w, st in zip(cols, (30, 100, 140, 100, 130, 44, 110), (False, True, True, False, False, False, True)):
-            self.tree.heading(c, text=c, anchor="w")
-            self.tree.column(c, width=self.px(w), anchor="w", stretch=st)
+        self.tree = self.make_tree(left, (("✓", 30, False), ("歌手", 100, True), ("歌名", 140, True), ("行為類型", 100, False), ("來源", 130, False), ("行數", 44, False), ("行為", 110, True)), "extended")
         self.tree.tag_configure("flag", background=WARN_BG)
         self.fill_with_scrollbar(self.tree)
         self.tree.bind("<ButtonRelease-1>", self.on_tree_click)
@@ -308,17 +306,12 @@ class App:
         pane = ttk.PanedWindow(f, orient="horizontal")
         pane.pack(fill="both", expand=True)
         left = self.card(pane)
-        cols = ("批次", "時間", "首數")
-        self.batch_tree = ttk.Treeview(left, columns=cols, show="headings", selectmode="browse")
-        for c, w, st in zip(cols, (240, 140, 60), (True, False, False)):
-            self.batch_tree.heading(c, text=c, anchor="w")
-            self.batch_tree.column(c, width=self.px(w), anchor="w", stretch=st)
+        self.batch_tree = self.make_tree(left, (("批次", 240, True), ("時間", 140, False), ("首數", 60, False)), "browse")
         self.fill_with_scrollbar(self.batch_tree)
         self.batch_tree.bind("<<TreeviewSelect>>", self.show_batch)
         pane.add(left, weight=2)
         right = self.card(pane)
-        self.batch_files = ttk.Treeview(right, columns=("檔案",), show="headings", selectmode="extended")
-        self.batch_files.heading("檔案", text="此批次的檔案（可多選，只還原選取的項目）", anchor="w")
+        self.batch_files = self.make_tree(right, (("此批次的檔案（可多選，只還原選取的項目）", 200, True),), "extended")
         self.fill_with_scrollbar(self.batch_files)
         pane.add(right, weight=3)
         ttk.Label(bot, text="還原會將歌詞等標籤恢復為寫入前的狀態；音訊與備份時不同的檔案會略過。", style="Muted.TLabel").pack(side="left")
@@ -698,23 +691,15 @@ class App:
         r = next((x for x in self.review_rows if str(x["id"]) == sel[0]), None)
         if r is None:
             return
-        p = self.preview
-        p.configure(state="normal")
-        p.delete("1.0", "end")
-        p.insert("end", f"{r['artist']} - {r['title']}\n", "head")
-        p.insert("end", f"{r['album']}\n", "muted")
+        parts = [(f"{r['artist']} - {r['title']}\n", "head"), (f"{r['album']}\n", "muted")]
         if r["kind"] == "new":
-            p.insert("end", f"來源：{r['source']}\n比對結果：{r['matched']}（{r['matched_length']:.1f} 秒，檔案為 {r['length']:.1f} 秒）\n", "muted")
-        for flag in json.loads(r["flags"]):
-            p.insert("end", f"需留意：{flag}\n")
+            parts.append((f"來源：{r['source']}\n比對結果：{r['matched']}（{r['matched_length']:.1f} 秒，檔案為 {r['length']:.1f} 秒）\n", "muted"))
+        parts += [(f"需留意：{flag}\n", "") for flag in json.loads(r["flags"])]
         removed = json.loads(r["removed"])
         if removed:
-            p.insert("end", "\n將刪除的內容：\n", "muted")
-            for line in removed:
-                p.insert("end", line + "\n", "gone")
-        p.insert("end", "\n寫入後的歌詞：\n", "muted")
-        p.insert("end", r["lrc"])
-        p.configure(state="disabled")
+            parts += [("\n將刪除的內容：\n", "muted")] + [(line + "\n", "gone") for line in removed]
+        parts += [("\n寫入後的歌詞：\n", "muted"), (r["lrc"], "")]
+        self.show_text(self.preview, *parts)
 
     # ---- backups ----
     def fill_backups(self):
