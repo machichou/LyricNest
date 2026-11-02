@@ -1,7 +1,6 @@
 """Drive the real window on throwaway data: a screenshot of each tab, then every flow a person can click through, including failures and closing mid-job.
 ui_shots.py <out_dir>. No music is touched; the window stays behind other windows; exits non-zero if any check fails."""
 import ctypes
-import json
 import os
 import shutil
 import subprocess
@@ -9,7 +8,6 @@ import sys
 import tempfile
 import time
 import tkinter as tk
-import tkinter.font  # noqa: F401
 import tkinter.ttk
 from unittest import mock
 

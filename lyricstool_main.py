@@ -5,7 +5,6 @@ import logging.handlers
 import os
 import sys
 import tkinter as tk
-import tkinter.font  # noqa: F401  (the window measures fonts through tk.font)
 
 from lyricstool import dialogs, store as store_mod, theme
 

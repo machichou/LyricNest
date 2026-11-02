@@ -136,7 +136,7 @@ def apply(root, scale):
     s.element_create("Combobox.downarrow", "image", keep(_photo(root, w, h, _pixels(w, h, 0, CARD, on=CARD, mark=chevron))), sticky="", padding=0)
     s.layout("TCombobox", [("Field.border", {"sticky": "nswe", "children": [("Combobox.downarrow", {"side": "right", "sticky": ""}),
                                                                             ("Combobox.padding", {"sticky": "nswe", "children": [("Combobox.textarea", {"sticky": "nswe"})]})]})])
-    s.configure("TCombobox", padding=(px(10), px(6), 0, px(6)), arrowsize=px(12))
+    s.configure("TCombobox", padding=(px(10), px(6), 0, px(6)))
     s.map("TCombobox", foreground=[("readonly", INK)], selectbackground=[("readonly", CARD)], selectforeground=[("readonly", INK)])
     s.configure("ComboboxPopdownFrame", background=LINE, relief="flat", borderwidth=1)
     for option, value in (("background", CARD), ("foreground", INK), ("selectBackground", RAISED), ("selectForeground", INK), ("font", base), ("relief", "flat"), ("borderWidth", 0), ("highlightThickness", 0)):
@@ -158,7 +158,7 @@ def apply(root, scale):
     strip("Notebook.client", top=LINE)
     s.layout("TNotebook.Tab", [("Notebook.tab", {"sticky": "nswe", "children": [("Notebook.padding", {"sticky": "nswe", "children": [("Notebook.label", {"sticky": ""})]})]})])
     s.layout("TNotebook", [("Notebook.client", {"sticky": "nswe"})])
-    s.configure("TNotebook", tabmargins=(0, 0, 0, px(10)), padding=0, borderwidth=0)
+    s.configure("TNotebook", tabmargins=(0, 0, 0, px(10)))
     s.configure("TNotebook.Tab", padding=(px(16), px(6)))
     s.map("TNotebook.Tab", foreground=[("selected", ON_LIGHT)])
 
