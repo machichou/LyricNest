@@ -145,7 +145,7 @@ app.show_batch()
 shot("4_backup")
 app.nb.select(app.tab_settings)
 shot("5_settings")
-check("buttons beside the paths say save", [b.cget("text") for b in buttons_in(app.tab_settings) if b.cget("text") == "儲存"], ["儲存"] * 4)
+check("buttons beside the paths say browse", [b.cget("text") for b in buttons_in(app.tab_settings) if b.cget("text") == "瀏覽"], ["瀏覽"] * 4)
 
 # The real dialogs.
 for label, want in (("是", True), ("否", False)):
@@ -310,20 +310,18 @@ with mock.patch("lyricstool.app.dialogs") as box, mock.patch("lyricstool.app.fil
     check("back button goes back", (app.open_state, app.lists.winfo_ismapped()), (None, 1))
     check("cards can be opened from the keyboard", all(app.card_frames["none"].bind(k) for k in ("<Return>", "<space>")), True)
 
-    # Settings: the button beside a path saves what was typed, and with nothing typed asks for a path first.
+    # Settings: the button beside a path only fills it in; nothing is saved or scanned until 儲存設定.
     outside, inside = os.path.join(d, "bak"), os.path.join(lib, "bak")
     files.askdirectory.return_value = inside
-    app.save_path("backup_root", "dir")
-    check("nothing typed: asks for a folder and saves it, inside the library too", (files.askdirectory.called, cfg["backup_root"], store_mod.load_config()["backup_root"]), (True, inside, inside))
-    box.showinfo.reset_mock()
-    files.askdirectory.reset_mock()
-    app.v_paths["backup_root"].set(outside)
-    app.save_path("backup_root", "dir")
-    check("typed: saved without asking for a folder", (files.askdirectory.called, cfg["backup_root"], box.showinfo.called), (False, outside, True))
-    box.showinfo.reset_mock()
+    app.pick("backup_root", "dir")
+    check("picking fills the field and saves nothing", (app.v_paths["backup_root"].get(), cfg["backup_root"], app.thread is None or not app.thread.is_alive()), (inside, outside, True))
+    app.save_settings()
+    check("saved by 儲存設定, inside the library too", (cfg["backup_root"], store_mod.load_config()["backup_root"]), (inside, inside))
     files.askdirectory.return_value = ""
-    app.save_path("backup_root", "dir")
-    check("closing the folder window saves nothing", (box.showinfo.called, cfg["backup_root"]), (False, outside))
+    app.pick("backup_root", "dir")
+    check("closing the folder window leaves the field as it was", app.v_paths["backup_root"].get(), inside)
+    app.v_paths["backup_root"].set(outside)
+    app.save_settings()
 
     # Bad input is refused and changes nothing.
     app.v_paths["backup_root"].set("")

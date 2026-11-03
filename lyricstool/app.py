@@ -346,7 +346,7 @@ class App:
             v = tk.StringVar(value=self.cfg.get(key, ""))
             self.v_paths[key] = v
             ttk.Entry(left, textvariable=v).grid(row=3 * i + 1, column=0, sticky="ew")
-            ttk.Button(left, text="儲存", command=lambda k=key, t=kind: self.save_path(k, t)).grid(row=3 * i + 1, column=1, padx=(self.px(8), 0))
+            ttk.Button(left, text="瀏覽", command=lambda k=key, t=kind: self.pick(k, t)).grid(row=3 * i + 1, column=1, padx=(self.px(8), 0))
         self.chk_backup = ttk.Checkbutton(left, text="寫入前先備份原本的標籤", variable=self.v_backup, command=self.on_backup_switch)
         self.chk_backup.grid(row=5, column=0, columnspan=2, sticky="w", pady=(self.px(5), 0))
         head = ttk.Frame(left)
@@ -596,14 +596,10 @@ class App:
         save_config(self.cfg)
         self.update_write_button()
 
-    def save_path(self, key, kind):
-        """The button beside a path: saves what was typed, and with nothing typed asks for a path first."""
-        if self.v_paths[key].get().strip() == self.cfg.get(key, ""):
-            p = filedialog.askdirectory() if kind == "dir" else filedialog.askopenfilename()
-            if not p:
-                return
+    def pick(self, key, kind):
+        p = filedialog.askdirectory() if kind == "dir" else filedialog.askopenfilename()
+        if p:
             self.v_paths[key].set(os.path.normpath(p))
-        self.save_settings()
 
     def export_missing(self):
         p = filedialog.asksaveasfilename(defaultextension=".csv", initialfile="缺少同步歌詞的歌曲.csv", filetypes=[("CSV", "*.csv")])
