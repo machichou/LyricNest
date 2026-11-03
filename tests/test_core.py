@@ -1,4 +1,5 @@
 """Run with: python -m unittest discover tests. Uses ffmpeg to make real audio in a temp folder; never touches the music library."""
+import base64
 import csv
 import hashlib
 import json
@@ -15,7 +16,7 @@ from unittest import mock
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from lyricstool import audio, jobs
 from lyricstool.clean import clean_lrc, is_credit, strip_credits
-from lyricstool.sources import Hit, Limiter, OnlineLrclib, Retry, Sidecar, make_query, matches, names_for, usable
+from lyricstool.sources import Hit, Limiter, OnlineLrclib, QQMusic, Retry, build_sources, Sidecar, make_query, matches, names_for, usable
 from lyricstool.store import Store, default_config, text_hash
 
 
@@ -152,6 +153,24 @@ class Matching(unittest.TestCase):
         lim = Limiter("來源", 0, [2], jobs.Ctx(lambda kind, text: seen.append(text) if kind == "status" else None))
         self.assertEqual(lim.call(ask), "ok")
         self.assertEqual(seen, ["來源 暫時無法查詢（來源忙碌），2 秒後重試（第 1 次）", "來源 暫時無法查詢（來源忙碌），1 秒後重試（第 1 次）", "來源 重試中（第 1 次）…"])
+
+    def test_qq_music_checks_length_before_taking_lyrics(self):
+        def reply(url, **headers):
+            if "smartbox" in url:
+                return {"data": {"song": {"itemlist": [{"mid": "short"}, {"mid": "right"}]}}}
+            if "play_single_song" in url:
+                return {"data": [{"name": "Tea For Two", "singer": [{"name": "小野リサ"}], "interval": 150 if "short" in url else 200}]}
+            return {"lyric": base64.b64encode(LRC.encode()).decode()} if "right" in url else {}
+
+        src = QQMusic(jobs.Ctx())
+        src.lim.delay = 0
+        with mock.patch("lyricstool.sources._get_json", side_effect=reply):
+            hit = src.find(self.q)
+        self.assertEqual((hit.lrc, hit.matched_length), (LRC, 200))
+
+    def test_sources_ask_netease_before_lrclib(self):
+        cfg = {"sources": {"sidecar": True, "lrcget": True, "lrclib": True, "netease": True, "qq": True, "kugou": True}, "lrcget_db": "", "lrclib_db": ""}
+        self.assertEqual([s.label for s in build_sources(cfg, jobs.Ctx())], [".lrc 外掛檔", "網易雲", "LRCLIB（線上）", "QQ 音樂", "酷狗"])
 
     def test_multi_artist_tag(self):
         self.assertIn("蛋堡 Soft Lipa", names_for("黃玠/蛋堡 Soft Lipa", {}))

@@ -138,10 +138,10 @@ class Limiter:
         raise Busy(self.label)
 
 
-def _get_json(url, **headers):
+def _get_json(url, timeout=30, **headers):
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", **headers})
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read().decode("utf-8", "replace"))
     except urllib.error.HTTPError as e:
         if e.code == 404:
@@ -249,11 +249,13 @@ class OnlineLrclib:
     label = "LRCLIB（線上）"
 
     def __init__(self, ctx):
-        self.lim = Limiter("LRCLIB", 0.7, [5, 15], ctx)  # its 503s are frequent and short-lived; waiting longer per call only stalls every track
+        # No retry on the same song and a short timeout: a refused song is asked again at the end of the run anyway,
+        # and in real runs these waits doubled the time per song for one hit in four.
+        self.lim = Limiter("LRCLIB", 0.7, [], ctx)
 
     def _get(self, endpoint, params, optional=False):
         url = f"https://lrclib.net/api/{endpoint}?" + urllib.parse.urlencode(params)
-        return self.lim.call(lambda: _get_json(url, **{"User-Agent": UA}), optional)
+        return self.lim.call(lambda: _get_json(url, timeout=10, **{"User-Agent": UA}), optional)
 
     def find(self, q):
         name = q.names[0] if q.names else q.artist
@@ -303,6 +305,34 @@ class NetEase:
         return instrumental
 
 
+class QQMusic:
+    label = "QQ 音樂"
+    REFERER = "https://y.qq.com/"
+
+    def __init__(self, ctx):
+        self.lim = Limiter("QQ 音樂", 2.0, [15], ctx)
+
+    def _get(self, url):
+        return self.lim.call(lambda: _get_json(url, Referer=self.REFERER)) or {}
+
+    def find(self, q):
+        for name in q.names[:2]:
+            found = self._get("https://c.y.qq.com/splcloud/fcgi-bin/smartbox_new.fcg?" + urllib.parse.urlencode({"key": f"{name} {q.search_title}", "format": "json"}))
+            for s in ((found.get("data") or {}).get("song") or {}).get("itemlist") or []:
+                song = (self._get(f"https://c.y.qq.com/v8/fcg-bin/fcg_play_single_song.fcg?songmid={s['mid']}&format=json").get("data") or [{}])[0]  # the search gives no length
+                who = "/".join(a.get("name", "") for a in song.get("singer") or [])
+                if not matches(q, who, song.get("name") or "", song.get("interval") or 0):
+                    continue
+                d = self._get(f"https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?songmid={s['mid']}&format=json&g_tk=5381")
+                try:
+                    lrc = base64.b64decode(d.get("lyric") or "").decode("utf-8", "replace")
+                except ValueError:
+                    continue
+                if usable(lrc, q.length):
+                    return Hit(self.label, lrc, matched_artist=who, matched_title=song["name"], matched_length=song["interval"])
+        return None
+
+
 class Kugou:
     label = "酷狗"
 
@@ -328,7 +358,7 @@ class Kugou:
 
 
 def build_sources(cfg, ctx):
-    """Cheapest first, so online services are only asked about what nothing local knows."""
+    """Cheapest first, so online services are only asked about what nothing local knows; among those, NetEase first, as it found most."""
     out = []
     on = cfg["sources"]
     if on.get("sidecar"):
@@ -345,10 +375,12 @@ def build_sources(cfg, ctx):
             out.append(local)
         except sqlite3.Error as e:
             ctx.log(f"無法開啟 LRCLIB 本機資料庫，改為查詢線上資料：{e}")
-    if on.get("lrclib") and local is None:
-        out.append(OnlineLrclib(ctx))
     if on.get("netease"):
         out.append(NetEase(ctx))
+    if on.get("lrclib") and local is None:
+        out.append(OnlineLrclib(ctx))
+    if on.get("qq"):
+        out.append(QQMusic(ctx))
     if on.get("kugou"):
         out.append(Kugou(ctx))
     return out

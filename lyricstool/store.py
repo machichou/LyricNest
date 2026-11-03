@@ -34,7 +34,7 @@ def default_config():
             "to_traditional": True,
             "remove_credits": True,
             "backup_enabled": True,
-            "sources": {"sidecar": True, "lrcget": True, "lrclib": True, "netease": True, "kugou": True},
+            "sources": {"sidecar": True, "lrcget": True, "lrclib": True, "netease": True, "qq": True, "kugou": True},
             "aliases": {}}
 
 
@@ -44,7 +44,8 @@ def load_config():
     if os.path.exists(p):
         try:
             with open(p, encoding="utf-8") as fh:
-                cfg.update(json.load(fh))
+                saved = json.load(fh)
+            cfg.update(saved, sources={**cfg["sources"], **saved.get("sources", {})})  # a source added in a later version starts switched on
         except (OSError, ValueError):
             os.replace(p, p + ".bad")
     return cfg

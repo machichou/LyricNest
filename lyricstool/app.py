@@ -360,7 +360,7 @@ class App:
         row = ttk.Frame(right)
         row.pack(anchor="w")
         self.v_sources = {}
-        for i, (key, name) in enumerate((("sidecar", ".lrc 外掛檔"), ("lrcget", "LRCGET"), ("lrclib", "LRCLIB"), ("netease", "網易雲"), ("kugou", "酷狗"))):
+        for i, (key, name) in enumerate((("sidecar", ".lrc 外掛檔"), ("lrcget", "LRCGET"), ("lrclib", "LRCLIB"), ("netease", "網易雲"), ("qq", "QQ 音樂"), ("kugou", "酷狗"))):
             self.v_sources[key] = tk.BooleanVar(value=self.cfg["sources"].get(key, True))
             ttk.Checkbutton(row, text=name, variable=self.v_sources[key]).grid(row=i // 3, column=i % 3, sticky="w", padx=(0, self.px(22)))
         ttk.Label(right, text="歌詞處理", style="Title.TLabel").pack(anchor="w", pady=(self.px(14), self.px(3)))
