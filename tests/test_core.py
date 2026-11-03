@@ -15,7 +15,7 @@ from unittest import mock
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from lyricstool import audio, jobs
 from lyricstool.clean import clean_lrc, is_credit, strip_credits
-from lyricstool.sources import Hit, OnlineLrclib, Retry, Sidecar, make_query, matches, names_for, usable
+from lyricstool.sources import Hit, Limiter, OnlineLrclib, Retry, Sidecar, make_query, matches, names_for, usable
 from lyricstool.store import Store, default_config, text_hash
 
 
@@ -138,6 +138,20 @@ class Matching(unittest.TestCase):
             hit = src.find(self.q)
         self.assertEqual((hit.lrc, src.lim.fails), (LRC, 0))
         self.assertLess(time.monotonic() - started, 1, "no waiting before trying search")
+
+    def test_countdown_reaches_one_then_says_it_is_retrying(self):
+        seen = []
+        replies = iter([Retry(), "ok"])
+
+        def ask():
+            reply = next(replies)
+            if isinstance(reply, Exception):
+                raise reply
+            return reply
+
+        lim = Limiter("來源", 0, [2], jobs.Ctx(lambda kind, text: seen.append(text) if kind == "status" else None))
+        self.assertEqual(lim.call(ask), "ok")
+        self.assertEqual(seen, ["來源 暫時無法查詢（來源忙碌），2 秒後重試（第 1 次）", "來源 暫時無法查詢（來源忙碌），1 秒後重試（第 1 次）", "來源 重試中（第 1 次）…"])
 
     def test_multi_artist_tag(self):
         self.assertIn("蛋堡 Soft Lipa", names_for("黃玠/蛋堡 Soft Lipa", {}))

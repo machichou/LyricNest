@@ -35,9 +35,9 @@ class Ctx:
 
     def wait(self, seconds, template):
         for left in range(int(seconds), 0, -1):
+            self.emit("status", template.format(left))
             if self._cancel.wait(1):
                 return
-            self.emit("status", template.format(left))
 
     def log(self, text):
         log.info(text)

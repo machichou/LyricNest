@@ -129,6 +129,7 @@ class Limiter:
             self.ctx.wait(wait, f"{self.label} 暫時無法查詢（來源忙碌），{{}} 秒後重試（第 {attempt + 1} 次）")
             if self.ctx.cancelled():
                 raise Busy(self.label)
+            self.ctx.status(f"{self.label} 重試中（第 {attempt + 1} 次）…")  # the request can take up to its 30-second timeout; the countdown must not sit at 1 meanwhile
         self.fails += 1
         if self.fails >= 3:
             self.suspended_until = time.monotonic() + SUSPEND_SECONDS
