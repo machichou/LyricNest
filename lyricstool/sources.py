@@ -25,6 +25,7 @@ S2T = OpenCC("s2t")
 UA = "LyricsTool/1.0 (personal library, slow)"
 MAX_DIFF = 3
 SUSPEND_SECONDS = 600
+QUICK_RETRY = 5  # seconds; a song can afford this much while the other sources are still answering it
 NOISE = re.compile(r"\s*[\(\[][^\)\]]*(remaster|explicit|feat|bonus|deluxe|mono|stereo|version|live|cd only)[^\)\]]*[\)\]]"
                    r"|\s+-\s+.*(remaster|explicit|mono|stereo|version|live).*$", re.I)
 SPLIT_ARTISTS = re.compile(r"\s*(?:,|&|、|/|;|；| x | X | feat\.? | ft\.? | featuring | with )\s*", re.I)
@@ -148,7 +149,9 @@ class Limiter:
         self.suspended_until = 0.0
 
     def call(self, fn, optional=False):
-        """`optional`: one try only, and a refusal answers None instead of counting against the source."""
+        """A refusal is retried on the spot only when the wait is short. A longer wait is taken as a rest between songs,
+        so no song sits waiting for a source that cannot answer it in time. `optional`: one try only, and a refusal answers None
+        instead of counting against the source."""
         if time.monotonic() < self.suspended_until:
             raise Paused(self.label)
         for attempt, wait in enumerate(([] if optional else self.backoff) + [None]):
@@ -163,6 +166,10 @@ class Limiter:
                 if optional:
                     return None
             if wait is None:
+                break
+            if wait > QUICK_RETRY:
+                self.suspended_until = time.monotonic() + wait
+                self.ctx.status(f"{self.label} 暫時無法查詢（來源忙碌），休息 {wait} 秒，其他來源繼續查詢")
                 break
             self.ctx.wait(wait, f"{self.label} 暫時無法查詢（來源忙碌），{{}} 秒後重試（第 {attempt + 1} 次）", stop=_settled)
             if self.ctx.cancelled() or _settled():

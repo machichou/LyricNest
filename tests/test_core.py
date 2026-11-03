@@ -16,7 +16,7 @@ from unittest import mock
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from lyricstool import audio, jobs
 from lyricstool.clean import clean_lrc, is_credit, strip_credits
-from lyricstool.sources import Hit, Lane, Limiter, OnlineLrclib, QQMusic, Retry, build_sources, Sidecar, make_query, matches, names_for, usable
+from lyricstool.sources import Busy, Hit, Lane, Limiter, Paused, OnlineLrclib, QQMusic, Retry, build_sources, Sidecar, make_query, matches, names_for, usable
 from lyricstool.store import Store, default_config, text_hash
 
 
@@ -125,6 +125,20 @@ class Matching(unittest.TestCase):
         self.assertFalse(matches(self.q, "小野リサ", "Tea For Two", 204))
         self.assertFalse(matches(self.q, "Someone Else", "Tea For Two", 200))
         self.assertFalse(matches(self.q, "小野リサ", "Night and Day", 200))
+
+    def test_a_long_wait_rests_the_source_instead_of_holding_the_song(self):
+        lim = Limiter("網易雲", 0, [60], jobs.Ctx())
+
+        def refuse():
+            raise Retry()
+
+        started = time.monotonic()
+        with self.assertRaises(Busy):
+            lim.call(refuse)
+        self.assertLess(time.monotonic() - started, 1, "the song is not kept waiting a minute")
+        with self.assertRaises(Paused):
+            lim.call(lambda: "ok")
+        self.assertGreater(lim.suspended_until - time.monotonic(), 55, "the source rests for the wait instead")
 
     def test_lrclib_searches_at_once_when_the_exact_lookup_is_refused(self):
         def reply(url, **headers):
