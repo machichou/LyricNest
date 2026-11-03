@@ -34,6 +34,10 @@ class Busy(Exception):
     """The source is throttling or unreachable; the track should be asked again later."""
 
 
+class Paused(Busy):
+    """The source is resting after refusing several songs in a row; the song is asked again at the end of the run."""
+
+
 class Retry(Exception):
     pass
 
@@ -146,7 +150,7 @@ class Limiter:
     def call(self, fn, optional=False):
         """`optional`: one try only, and a refusal answers None instead of counting against the source."""
         if time.monotonic() < self.suspended_until:
-            raise Busy(self.label)
+            raise Paused(self.label)
         for attempt, wait in enumerate(([] if optional else self.backoff) + [None]):
             self.ctx.sleep(self.delay)
             if self.ctx.cancelled() or _settled():
@@ -283,9 +287,9 @@ class OnlineLrclib:
     label = "LRCLIB（線上）"
 
     def __init__(self, ctx):
-        # No retry on the same song and a short timeout: a refused song is asked again at the end of the run anyway,
-        # and in real runs these waits doubled the time per song for one hit in four.
-        self.lim = Limiter("LRCLIB", 0.7, [], ctx)
+        # One quick retry and a short timeout: its refusals usually pass within seconds, and since every source is asked at once,
+        # three seconds here cost little, while without the retry most songs ended up marked busy.
+        self.lim = Limiter("LRCLIB", 0.7, [3], ctx)
 
     def _get(self, endpoint, params, optional=False):
         url = f"https://lrclib.net/api/{endpoint}?" + urllib.parse.urlencode(params)
@@ -353,6 +357,8 @@ class QQMusic:
         for name in q.names[:2]:
             found = self._get("https://c.y.qq.com/splcloud/fcgi-bin/smartbox_new.fcg?" + urllib.parse.urlencode({"key": f"{name} {q.search_title}", "format": "json"}))
             for s in ((found.get("data") or {}).get("song") or {}).get("itemlist") or []:
+                if not matches(q, s.get("singer") or "", s.get("name") or "", q.length):  # artist and title first: the length costs a request per song
+                    continue
                 song = (self._get(f"https://c.y.qq.com/v8/fcg-bin/fcg_play_single_song.fcg?songmid={s['mid']}&format=json").get("data") or [{}])[0]  # the search gives no length
                 who = "/".join(a.get("name", "") for a in song.get("singer") or [])
                 if not matches(q, who, song.get("name") or "", song.get("interval") or 0):

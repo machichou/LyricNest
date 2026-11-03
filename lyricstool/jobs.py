@@ -10,7 +10,7 @@ from queue import Empty, Queue
 
 from . import audio
 from .clean import clean_lrc, is_synced, last_stamp, lyric_state, squash, strip_credits, sung_lines
-from .sources import Busy, Lane, build_sources, make_query
+from .sources import Busy, Lane, Paused, build_sources, make_query
 from .store import text_hash
 
 log = logging.getLogger("lyricstool")
@@ -171,9 +171,9 @@ def action_text(item):
 
 def lookup_one(sources, track, cfg, store, ctx, failed=None, lanes=None):
     """Ask every source at once; the first usable answer wins and becomes an item to review, and the others skip what is left of the song.
-    `failed` collects sources that could not answer. `lanes` keep each source to one song at a time across calls."""
+    `failed` maps each source that could not answer to why. `lanes` keep each source to one song at a time across calls."""
     q = make_query(track["artist"] or track["album_artist"], track["title"], track["album"], track["length"], track["path"], cfg["aliases"])
-    failed = [] if failed is None else failed
+    failed = {} if failed is None else failed
     own = lanes is None
     lanes = lanes or {s: Lane(s) for s in sources}
     settled, answers = threading.Event(), Queue()
@@ -189,14 +189,14 @@ def lookup_one(sources, track, cfg, store, ctx, failed=None, lanes=None):
                 s, hit = answers.get(timeout=0.2)
             except Empty:
                 if time.monotonic() > deadline:
-                    failed += waiting
+                    failed.update(dict.fromkeys(waiting, "逾時"))
                     break
                 continue
             waiting.remove(s)
             if isinstance(hit, Exception):
                 if not isinstance(hit, Busy):
                     log.error("source %s failed on %s", s.label, track["path"], exc_info=hit)
-                failed.append(s)
+                failed[s] = "暫停中" if isinstance(hit, Paused) else "忙碌" if isinstance(hit, Busy) else "出錯"
                 continue
             if hit is None:
                 continue
@@ -256,11 +256,12 @@ def run_lookup(store, cfg, ctx, statuses=("never", "busy"), text=""):
                 if not os.path.exists(t["path"]):
                     continue
                 ctx.progress(total - len(queue) + n - 1, total, f"{t['artist']} - {t['title']}")
-                failed = []
+                failed = {}
                 status = lookup_one(asking, t, cfg, store, ctx, failed, lanes)
                 if status is None:
                     continue
-                ctx.log(f"{LABELS.get(status, status)}：{t['artist'] or t['album_artist']} - {t['title']}")
+                why = "（" + "、".join(f"{s.label} {reason}" for s, reason in failed.items()) + "）" if status == "busy" else ""
+                ctx.log(f"{LABELS.get(status, status)}{why}：{t['artist'] or t['album_artist']} - {t['title']}")
                 if status == "busy":
                     retry.append((t, failed))  # the other sources already answered, so only these get asked again
                 else:
@@ -282,7 +283,7 @@ def run_lookup(store, cfg, ctx, statuses=("never", "busy"), text=""):
     return counts
 
 
-LABELS = {"found": "找到", "notfound": "查無歌詞", "instrumental": "純音樂", "busy": "來源忙碌待重查", "dismissed": "與先前移除的歌詞相同"}
+LABELS = {"found": "找到", "notfound": "查無歌詞", "instrumental": "純音樂", "busy": "待重查", "dismissed": "與先前移除的歌詞相同"}
 
 
 def summary(counts):

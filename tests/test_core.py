@@ -157,7 +157,10 @@ class Matching(unittest.TestCase):
     def test_qq_music_checks_length_before_taking_lyrics(self):
         def reply(url, **headers):
             if "smartbox" in url:
-                return {"data": {"song": {"itemlist": [{"mid": "short"}, {"mid": "right"}]}}}
+                return {"data": {"song": {"itemlist": [{"mid": "other", "singer": "別人", "name": "Tea For Two"}, {"mid": "short", "singer": "小野リサ", "name": "Tea For Two"},
+                                                       {"mid": "right", "singer": "小野リサ", "name": "Tea For Two"}]}}}
+            if "other" in url:
+                raise AssertionError("a song by someone else must not cost a length request")
             if "play_single_song" in url:
                 return {"data": [{"name": "Tea For Two", "singer": [{"name": "小野リサ"}], "interval": 150 if "short" in url else 200}]}
             return {"lyric": base64.b64encode(LRC.encode()).decode()} if "right" in url else {}
@@ -430,6 +433,18 @@ class Files(unittest.TestCase):
         self.assertEqual(jobs.lookup_one([Refuses(), Fake(None)], self.track(store, "a.flac"), cfg, store, ctx), "busy")
         self.assertEqual(jobs.lookup_one([Fake(None)], self.track(store, "a.flac"), cfg, store, ctx), "notfound")
 
+        class Resting:
+            label = "休息"
+
+            def find(self, q):
+                lim = Limiter("休息", 0, [], ctx)
+                lim.suspended_until = time.monotonic() + 60
+                return lim.call(lambda: None)
+
+        resting, failed = Resting(), {}
+        self.assertEqual(jobs.lookup_one([resting, Fake(None)], self.track(store, "a.flac"), cfg, store, ctx, failed), "busy")
+        self.assertEqual(failed, {resting: "暫停中"}, "a paused source is noted as paused, not as refusing")
+
     def test_retry_asks_only_the_source_that_failed(self):
         class Flaky:
             label = "時好時壞"
@@ -475,8 +490,11 @@ class Files(unittest.TestCase):
 
         store, cfg, ctx = Store(os.path.join(self.d, "s.sqlite")), self.config(), NoWait()
         jobs.run_scan(store, cfg, ctx)
+        logs = []
+        ctx.emit = lambda kind, text: logs.append(text) if kind == "log" else None
         with mock.patch.object(jobs, "build_sources", lambda c, x: [Refuses()]):
             self.assertEqual(jobs.run_lookup(store, cfg, ctx), {"busy": 3})
+        self.assertTrue(any(line.startswith("待重查（一直限流 忙碌）：") for line in logs), "the log says which source and why")
         self.assertEqual(len(store.lookup_targets(("never", "busy"))), 3)
 
     def test_exports_can_be_read_back(self):
