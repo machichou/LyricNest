@@ -45,5 +45,6 @@ build.bat
 - `tests\test_core.py`：用 ffmpeg 產生真實音訊，測寫入、還原和各種失敗情況，打包時會自動跑。
 - `tests\ui_shots.py`：實際操作視窗的每個流程並截圖，視窗留在其他視窗後面，只有測對話框時會短暫跳出來。
 - `tests\exe_smoke.py`：啟動打包好的 exe 的副本，檢查檔案內容、開啟、重複開啟和關閉，只碰自己的視窗。
+- `tests\source_bench.py`：用 `tests\bench_songs.csv` 的歌單（六種語言，熱門到小眾，取自 Apple Music 與 iTunes），讓每個線上來源各自查完每一首，統計找到率、被拒絕的比例和速度，每首的結果存在 `build\`。不需要音樂檔，但和程式查詢共用同一個網路的查詢額度，請在沒有查詢時執行。
 
 `dist\LyricsTool.exe --selftest 結果.json` 可以檢查打包內容和 HTTPS 連線是否正常。
