@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 import wave
 from unittest import mock
@@ -14,7 +15,7 @@ from unittest import mock
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from lyricstool import audio, jobs
 from lyricstool.clean import clean_lrc, is_credit, strip_credits
-from lyricstool.sources import Hit, Sidecar, make_query, matches, names_for, usable
+from lyricstool.sources import Hit, OnlineLrclib, Retry, Sidecar, make_query, matches, names_for, usable
 from lyricstool.store import Store, default_config, text_hash
 
 
@@ -123,6 +124,20 @@ class Matching(unittest.TestCase):
         self.assertFalse(matches(self.q, "小野リサ", "Tea For Two", 204))
         self.assertFalse(matches(self.q, "Someone Else", "Tea For Two", 200))
         self.assertFalse(matches(self.q, "小野リサ", "Night and Day", 200))
+
+    def test_lrclib_searches_at_once_when_the_exact_lookup_is_refused(self):
+        def reply(url, **headers):
+            if "/api/get?" in url:
+                raise Retry()  # what a 503 becomes
+            return [{"artistName": "小野リサ", "trackName": "Tea For Two", "duration": 200, "syncedLyrics": LRC, "instrumental": False}]
+
+        src = OnlineLrclib(jobs.Ctx())
+        src.lim.delay = 0
+        started = time.monotonic()
+        with mock.patch("lyricstool.sources._get_json", side_effect=reply):
+            hit = src.find(self.q)
+        self.assertEqual((hit.lrc, src.lim.fails), (LRC, 0))
+        self.assertLess(time.monotonic() - started, 1, "no waiting before trying search")
 
     def test_multi_artist_tag(self):
         self.assertIn("蛋堡 Soft Lipa", names_for("黃玠/蛋堡 Soft Lipa", {}))

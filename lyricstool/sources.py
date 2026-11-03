@@ -109,10 +109,11 @@ class Limiter:
         self.fails = 0
         self.suspended_until = 0.0
 
-    def call(self, fn):
+    def call(self, fn, optional=False):
+        """`optional`: one try only, and a refusal answers None instead of counting against the source."""
         if time.monotonic() < self.suspended_until:
             raise Busy(self.label)
-        for attempt, wait in enumerate(self.backoff + [None]):
+        for attempt, wait in enumerate(([] if optional else self.backoff) + [None]):
             self.ctx.sleep(self.delay)
             if self.ctx.cancelled():
                 raise Busy(self.label)
@@ -121,7 +122,8 @@ class Limiter:
                 self.fails = 0
                 return result
             except Retry:
-                pass
+                if optional:
+                    return None
             if wait is None:
                 break
             self.ctx.wait(wait, f"{self.label} 暫時無法查詢（來源忙碌），{{}} 秒後重試（第 {attempt + 1} 次）")
@@ -248,13 +250,14 @@ class OnlineLrclib:
     def __init__(self, ctx):
         self.lim = Limiter("LRCLIB", 0.7, [5, 15], ctx)  # its 503s are frequent and short-lived; waiting longer per call only stalls every track
 
-    def _get(self, endpoint, params):
+    def _get(self, endpoint, params, optional=False):
         url = f"https://lrclib.net/api/{endpoint}?" + urllib.parse.urlencode(params)
-        return self.lim.call(lambda: _get_json(url, **{"User-Agent": UA}))
+        return self.lim.call(lambda: _get_json(url, **{"User-Agent": UA}), optional)
 
     def find(self, q):
         name = q.names[0] if q.names else q.artist
-        d = self._get("get", {"artist_name": q.artist, "track_name": q.title, "album_name": q.album, "duration": round(q.length)})
+        # The exact lookup can refuse (503) for hours while search keeps working, so a refusal goes straight on to search.
+        d = self._get("get", {"artist_name": q.artist, "track_name": q.title, "album_name": q.album, "duration": round(q.length)}, optional=True)
         if d and d.get("instrumental"):
             return Hit(self.label, instrumental=True, matched_artist=d.get("artistName", ""), matched_title=d.get("trackName", ""), matched_length=d.get("duration") or 0)
         if d and usable(d.get("syncedLyrics"), q.length):
