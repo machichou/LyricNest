@@ -375,7 +375,7 @@ class App:
         self.v_skip_albums = tk.BooleanVar(value=self.cfg["skip_albums"])
         ttk.Checkbutton(row, text="專輯裡找不到的歌超過", variable=self.v_skip_albums).pack(side="left")
         self.v_skip_ratio = tk.StringVar(value=f"{self.cfg['skip_album_ratio']}%")
-        ttk.Combobox(row, textvariable=self.v_skip_ratio, values=[f"{p}%" for p in (50, 60, 70, 80, 90)], state="readonly", width=5).pack(side="left", padx=self.px(6))
+        ttk.Combobox(row, textvariable=self.v_skip_ratio, values=[f"{p}%" for p in range(20, 100, 10)], state="readonly", width=5).pack(side="left", padx=self.px(6))
         ttk.Label(row, text="時，略過整張專輯").pack(side="left")
         ttk.Label(right, text=f"同一張專輯查過 {jobs.ALBUM_SAMPLE} 首以上才判斷，純音樂也算找不到；略過的歌記成查無歌詞", style="Muted.TLabel").pack(anchor="w", padx=(self.px(24), 0))
 
