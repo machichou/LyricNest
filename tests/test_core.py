@@ -16,7 +16,7 @@ from unittest import mock
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from lyricstool import audio, jobs
 from lyricstool.clean import clean_lrc, is_credit, strip_credits
-from lyricstool.sources import Hit, Limiter, OnlineLrclib, QQMusic, Retry, build_sources, Sidecar, make_query, matches, names_for, usable
+from lyricstool.sources import Hit, Lane, Limiter, OnlineLrclib, QQMusic, Retry, build_sources, Sidecar, make_query, matches, names_for, usable
 from lyricstool.store import Store, default_config, text_hash
 
 
@@ -385,6 +385,30 @@ class Files(unittest.TestCase):
 
     def track(self, store, name):
         return store.db.execute("select *, 0 status from tracks where path=?", (os.path.join(self.lib, name),)).fetchone()
+
+    def test_first_lyrics_found_win_without_waiting_for_a_slow_source(self):
+        store, cfg, ctx = Store(os.path.join(self.d, "s.sqlite")), self.config(), jobs.Ctx()
+        jobs.run_scan(store, cfg, ctx)
+        asked = []
+
+        class Slow:
+            label = "慢"
+
+            def find(self, q):
+                asked.append(q.path)
+                time.sleep(1)
+                return None
+
+        slow, fast = Slow(), Fake(Hit("快", LRC, matched_title="歌名", matched_length=2.0))
+        lanes = {s: Lane(s) for s in (slow, fast)}
+        started = time.monotonic()
+        for name in ("a.flac", "b.mp3"):
+            self.assertEqual(jobs.lookup_one([slow, fast], self.track(store, name), cfg, store, ctx, lanes=lanes), "found")
+        self.assertLess(time.monotonic() - started, 0.9, "the slow source held nothing up")
+        time.sleep(1.5)
+        self.assertEqual([os.path.basename(p) for p in asked], ["a.flac"], "the second song was settled before the slow source got to it")
+        for lane in lanes.values():
+            lane.close()
 
     def test_one_source_saying_instrumental_is_not_final(self):
         store, cfg, ctx = Store(os.path.join(self.d, "s.sqlite")), self.config(), jobs.Ctx()

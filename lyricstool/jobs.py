@@ -6,14 +6,16 @@ import logging
 import os
 import threading
 import time
+from queue import Empty, Queue
 
 from . import audio
 from .clean import clean_lrc, is_synced, last_stamp, lyric_state, squash, strip_credits, sung_lines
-from .sources import Busy, build_sources, make_query
+from .sources import Busy, Lane, build_sources, make_query
 from .store import text_hash
 
 log = logging.getLogger("lyricstool")
 MAX_PASSES = 3
+SONG_SECONDS = 45  # a source that has not answered a song by then counts as busy for it, and the song is asked again later
 KIND_NAMES = {"new": "新歌詞", "cleanup": "清理製作名單"}
 
 
@@ -33,8 +35,10 @@ class Ctx:
     def sleep(self, seconds):
         self._cancel.wait(seconds)
 
-    def wait(self, seconds, template):
+    def wait(self, seconds, template, stop=lambda: False):
         for left in range(int(seconds), 0, -1):
+            if stop():
+                return
             self.emit("status", template.format(left))
             if self._cancel.wait(1):
                 return
@@ -165,37 +169,54 @@ def action_text(item):
     return "；".join([action] + [f for f in json.loads(item["flags"]) if f != "會取代純文字歌詞"])
 
 
-def lookup_one(sources, track, cfg, store, ctx, failed=None):
-    """Ask each source in turn; the first usable answer wins and becomes an item to review. `failed` collects sources that could not answer."""
+def lookup_one(sources, track, cfg, store, ctx, failed=None, lanes=None):
+    """Ask every source at once; the first usable answer wins and becomes an item to review, and the others skip what is left of the song.
+    `failed` collects sources that could not answer. `lanes` keep each source to one song at a time across calls."""
     q = make_query(track["artist"] or track["album_artist"], track["title"], track["album"], track["length"], track["path"], cfg["aliases"])
     failed = [] if failed is None else failed
-    instrumental = ""
+    own = lanes is None
+    lanes = lanes or {s: Lane(s) for s in sources}
+    settled, answers = threading.Event(), Queue()
     for s in sources:
-        if ctx.cancelled():
-            return None
-        try:
-            hit = s.find(q)
-        except Busy:
-            failed.append(s)
-            continue
-        except Exception:
-            log.exception("source %s failed on %s", s.label, track["path"])
-            failed.append(s)
-            continue
-        if hit is None:
-            continue
-        if hit.instrumental:  # one source's word is not final: sources disagree often enough that the others still get asked
-            instrumental = instrumental or hit.source
-            continue
-        cleaned = clean_lrc(hit.lrc, track["title"], q.names, cfg["to_traditional"], cfg["remove_credits"])
-        if cleaned.sung < 3:
-            continue
-        source = hit.source + ("（已轉繁體）" if cleaned.converted else "")
-        result = store.put_item(track["path"], "new", source, cleaned.lrc, cleaned.removed, flags_for(track, hit, cleaned), cleaned.sung,
-                                f"{hit.matched_artist} - {hit.matched_title}", hit.matched_length, text_hash(track["lyrics"]))
-        status = "dismissed" if result == "dismissed" else "found"
-        store.save_lookup(track["path"], status, hit.source)
-        return status
+        lanes[s].ask(q, settled, answers)
+    waiting, instrumental = list(sources), ""
+    deadline = time.monotonic() + SONG_SECONDS
+    try:
+        while waiting:
+            if ctx.cancelled():
+                return None
+            try:
+                s, hit = answers.get(timeout=0.2)
+            except Empty:
+                if time.monotonic() > deadline:
+                    failed += waiting
+                    break
+                continue
+            waiting.remove(s)
+            if isinstance(hit, Exception):
+                if not isinstance(hit, Busy):
+                    log.error("source %s failed on %s", s.label, track["path"], exc_info=hit)
+                failed.append(s)
+                continue
+            if hit is None:
+                continue
+            if hit.instrumental:  # one source's word is not final: sources disagree often enough that the others still get asked
+                instrumental = instrumental or hit.source
+                continue
+            cleaned = clean_lrc(hit.lrc, track["title"], q.names, cfg["to_traditional"], cfg["remove_credits"])
+            if cleaned.sung < 3:
+                continue
+            source = hit.source + ("（已轉繁體）" if cleaned.converted else "")
+            result = store.put_item(track["path"], "new", source, cleaned.lrc, cleaned.removed, flags_for(track, hit, cleaned), cleaned.sung,
+                                    f"{hit.matched_artist} - {hit.matched_title}", hit.matched_length, text_hash(track["lyrics"]))
+            status = "dismissed" if result == "dismissed" else "found"
+            store.save_lookup(track["path"], status, hit.source)
+            return status
+    finally:
+        settled.set()
+        if own:
+            for lane in lanes.values():
+                lane.close()
     status = "instrumental" if instrumental else "busy" if failed else "notfound"
     store.save_lookup(track["path"], status, instrumental)
     return status
@@ -220,36 +241,41 @@ def run_lookup(store, cfg, ctx, statuses=("never", "busy"), text=""):
     sources = build_sources(cfg, ctx)
     if not sources:
         raise ValueError("沒有可用的歌詞來源，請至「設定」開啟。")
-    ctx.log("來源順序：" + " → ".join(s.label for s in sources))
+    ctx.log("同時查詢的來源：" + "、".join(s.label for s in sources))
     counts = {}
     total = len(targets)
     queue = [(t, sources) for t in targets]
-    for round_no in range(1, MAX_PASSES + 1):
-        retry = []
-        for n, (t, asking) in enumerate(queue, 1):
-            if ctx.cancelled():
-                ctx.log(f"已停止。查詢結果已儲存，下次會接續查詢：{summary(counts)}")
-                return counts
-            if not os.path.exists(t["path"]):
-                continue
-            ctx.progress(total - len(queue) + n - 1, total, f"{t['artist']} - {t['title']}")
-            failed = []
-            status = lookup_one(asking, t, cfg, store, ctx, failed)
-            if status is None:
-                continue
-            ctx.log(f"{LABELS.get(status, status)}：{t['artist'] or t['album_artist']} - {t['title']}")
-            if status == "busy":
-                retry.append((t, failed))  # the other sources already answered, so only these get asked again
-            else:
-                counts[status] = counts.get(status, 0) + 1
-        ctx.progress(total - len(retry), total, "")
-        queue = retry
-        if not queue:
-            break
-        if round_no < MAX_PASSES:
-            wait = retry_wait(queue)
-            ctx.log(f"{len(queue)} 首因來源忙碌需要重查，約 {max(wait / 60, 1):.0f} 分鐘後自動重試（第 {round_no + 1} 輪）")
-            ctx.wait(wait, "等待來源恢復，{} 秒後重查")
+    lanes = {s: Lane(s) for s in sources}
+    try:
+        for round_no in range(1, MAX_PASSES + 1):
+            retry = []
+            for n, (t, asking) in enumerate(queue, 1):
+                if ctx.cancelled():
+                    ctx.log(f"已停止。查詢結果已儲存，下次會接續查詢：{summary(counts)}")
+                    return counts
+                if not os.path.exists(t["path"]):
+                    continue
+                ctx.progress(total - len(queue) + n - 1, total, f"{t['artist']} - {t['title']}")
+                failed = []
+                status = lookup_one(asking, t, cfg, store, ctx, failed, lanes)
+                if status is None:
+                    continue
+                ctx.log(f"{LABELS.get(status, status)}：{t['artist'] or t['album_artist']} - {t['title']}")
+                if status == "busy":
+                    retry.append((t, failed))  # the other sources already answered, so only these get asked again
+                else:
+                    counts[status] = counts.get(status, 0) + 1
+            ctx.progress(total - len(retry), total, "")
+            queue = retry
+            if not queue:
+                break
+            if round_no < MAX_PASSES:
+                wait = retry_wait(queue)
+                ctx.log(f"{len(queue)} 首因來源忙碌需要重查，約 {max(wait / 60, 1):.0f} 分鐘後自動重試（第 {round_no + 1} 輪）")
+                ctx.wait(wait, "等待來源恢復，{} 秒後重查")
+    finally:
+        for lane in lanes.values():
+            lane.close()
     if queue:
         counts["busy"] = len(queue)
     ctx.log(f"查詢完成：{summary(counts)}")

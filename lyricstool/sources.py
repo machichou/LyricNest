@@ -5,6 +5,7 @@ import os
 import pathlib
 import re
 import sqlite3
+import threading
 import time
 import unicodedata
 import urllib.error
@@ -15,6 +16,8 @@ from dataclasses import dataclass
 import yaml
 from opencc import OpenCC
 from rapidfuzz import fuzz
+
+from queue import Queue
 
 from .clean import T2S, fold, has_offset, is_placeholder, last_stamp, sung_lines
 
@@ -101,6 +104,37 @@ def usable(lrc, length):
     return len(sung_lines(lrc)) >= 3 and last_stamp(lrc) <= length + 2
 
 
+_lane = threading.local()
+
+
+def _settled():
+    """True once another source has already found the song this lane is working on."""
+    song = getattr(_lane, "settled", None)
+    return song is not None and song.is_set()
+
+
+class Lane:
+    """A source's own thread: it never has two requests out at once, and the job moves on without waiting for it."""
+
+    def __init__(self, source):
+        self.source, self.asks = source, Queue()
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def ask(self, q, settled, answers):
+        self.asks.put((q, settled, answers))
+
+    def close(self):
+        self.asks.put(None)
+
+    def _run(self):
+        while (ask := self.asks.get()) is not None:
+            q, _lane.settled, answers = ask
+            try:
+                answers.put((self.source, None if _settled() else self.source.find(q)))
+            except Exception as e:  # handed to the job, which logs it and counts the source as failed
+                answers.put((self.source, e))
+
+
 class Limiter:
     """Spaces requests, waits out throttling with visible messages, and stops asking a source that keeps refusing."""
 
@@ -115,7 +149,7 @@ class Limiter:
             raise Busy(self.label)
         for attempt, wait in enumerate(([] if optional else self.backoff) + [None]):
             self.ctx.sleep(self.delay)
-            if self.ctx.cancelled():
+            if self.ctx.cancelled() or _settled():
                 raise Busy(self.label)
             try:
                 result = fn()
@@ -126,8 +160,8 @@ class Limiter:
                     return None
             if wait is None:
                 break
-            self.ctx.wait(wait, f"{self.label} 暫時無法查詢（來源忙碌），{{}} 秒後重試（第 {attempt + 1} 次）")
-            if self.ctx.cancelled():
+            self.ctx.wait(wait, f"{self.label} 暫時無法查詢（來源忙碌），{{}} 秒後重試（第 {attempt + 1} 次）", stop=_settled)
+            if self.ctx.cancelled() or _settled():
                 raise Busy(self.label)
             self.ctx.status(f"{self.label} 重試中（第 {attempt + 1} 次）…")  # the request can take up to its 30-second timeout; the countdown must not sit at 1 meanwhile
         self.fails += 1
@@ -168,7 +202,7 @@ class Sidecar:
 
 
 def _open_ro(path):
-    c = sqlite3.connect(pathlib.Path(path).as_uri() + "?mode=ro&immutable=1", uri=True)
+    c = sqlite3.connect(pathlib.Path(path).as_uri() + "?mode=ro&immutable=1", uri=True, check_same_thread=False)  # opened by the job, read by the source's lane, one call at a time
     c.execute("pragma query_only=1")
     return c
 
