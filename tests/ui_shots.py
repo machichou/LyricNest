@@ -344,8 +344,23 @@ with mock.patch("lyricstool.app.dialogs") as box, mock.patch("lyricstool.app.fil
     pump()
     check("folder names parsed the same way", cfg["excluded"], ["甲", "乙", "丙", "丁"])
     app.v_excluded.set("")
+    app.v_skip_albums.set(True)
+    app.v_skip_ratio.set("60%")
     app.save_settings()
     pump()
+    check("album skip saved", (cfg["skip_albums"], cfg["skip_album_ratio"]), (True, 60))
+    app.v_skip_albums.set(False)
+    app.save_settings()
+    pump()
+
+    # A source that keeps refusing asks once per job whether to stop.
+    box.askyesno.reset_mock()
+    box.askyesno.return_value = False
+    app.events.put(("limited", "網易雲"))
+    app.events.put(("limited", "網易雲"))
+    pump()
+    check("rate limit asked about once", box.askyesno.call_count, 1)
+    check("the question names the source", "網易雲" in box.askyesno.call_args[0][1], True)
 
     # Progress wording.
     app.started = time.monotonic() - 60

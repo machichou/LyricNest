@@ -180,6 +180,7 @@ class Limiter:
             self.suspended_until = time.monotonic() + SUSPEND_SECONDS
             self.fails = 0
             self.ctx.log(f"{self.label} 連續無法查詢，暫停使用 10 分鐘，其他來源繼續查詢；這段期間的歌曲之後會自動重查")
+            self.ctx.emit("limited", self.label)
         raise Busy(self.label)
 
 

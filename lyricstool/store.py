@@ -34,6 +34,8 @@ def default_config():
             "to_traditional": True,
             "remove_credits": True,
             "backup_enabled": True,
+            "skip_albums": False,
+            "skip_album_ratio": 80,
             "sources": {"sidecar": True, "lrcget": True, "lrclib": True, "netease": True, "qq": True, "kugou": True},
             "aliases": {}}
 

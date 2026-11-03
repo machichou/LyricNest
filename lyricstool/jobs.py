@@ -16,6 +16,7 @@ from .store import text_hash
 log = logging.getLogger("lyricstool")
 MAX_PASSES = 3
 SONG_SECONDS = 45  # a source that has not answered a song by then counts as busy for it, and the song is asked again later
+ALBUM_SAMPLE = 3  # songs of an album answered before it can be given up on, so one odd track does not settle it
 KIND_NAMES = {"new": "新歌詞", "cleanup": "清理製作名單"}
 
 
@@ -246,6 +247,7 @@ def run_lookup(store, cfg, ctx, statuses=("never", "busy"), text=""):
     total = len(targets)
     queue = [(t, sources) for t in targets]
     lanes = {s: Lane(s) for s in sources}
+    albums, given_up = {}, set()  # by folder: [songs answered, songs nothing had lyrics for]
     try:
         for round_no in range(1, MAX_PASSES + 1):
             retry = []
@@ -254,6 +256,11 @@ def run_lookup(store, cfg, ctx, statuses=("never", "busy"), text=""):
                     ctx.log(f"已停止。查詢結果已儲存，下次會接續查詢：{summary(counts)}")
                     return counts
                 if not os.path.exists(t["path"]):
+                    continue
+                album = os.path.dirname(t["path"])
+                if album in given_up:
+                    store.save_lookup(t["path"], "notfound", "整張專輯略過")
+                    counts["skipped"] = counts.get("skipped", 0) + 1
                     continue
                 ctx.progress(total - len(queue) + n - 1, total, f"{t['artist']} - {t['title']}")
                 failed = {}
@@ -264,8 +271,15 @@ def run_lookup(store, cfg, ctx, statuses=("never", "busy"), text=""):
                 ctx.log(f"{LABELS.get(status, status)}{why}：{t['artist'] or t['album_artist']} - {t['title']}")
                 if status == "busy":
                     retry.append((t, failed))  # the other sources already answered, so only these get asked again
-                else:
-                    counts[status] = counts.get(status, 0) + 1
+                    continue
+                counts[status] = counts.get(status, 0) + 1
+                if cfg["skip_albums"]:
+                    tally = albums.setdefault(album, [0, 0])
+                    tally[0] += 1
+                    tally[1] += status in ("notfound", "instrumental")
+                    if tally[0] >= ALBUM_SAMPLE and tally[1] * 100 > cfg["skip_album_ratio"] * tally[0]:
+                        given_up.add(album)
+                        ctx.log(f"略過整張專輯（查過 {tally[0]} 首，{tally[1]} 首找不到）：{t['album'] or os.path.basename(album)}")
             ctx.progress(total - len(retry), total, "")
             queue = retry
             if not queue:
@@ -283,7 +297,7 @@ def run_lookup(store, cfg, ctx, statuses=("never", "busy"), text=""):
     return counts
 
 
-LABELS = {"found": "找到", "notfound": "查無歌詞", "instrumental": "純音樂", "busy": "待重查", "dismissed": "與先前移除的歌詞相同"}
+LABELS = {"found": "找到", "notfound": "查無歌詞", "instrumental": "純音樂", "busy": "待重查", "skipped": "整張專輯略過", "dismissed": "與先前移除的歌詞相同"}
 
 
 def summary(counts):

@@ -50,6 +50,7 @@ class App:
         self.closing = False
         self.closed = False
         self.started = 0.0
+        self.warned = set()
         self.review_rows = []
         root.title(f"歌詞工具 {__version__}")
         self.scale = root.winfo_fpixels("1i") / 96
@@ -369,6 +370,14 @@ class App:
         self.v_credits = tk.BooleanVar(value=self.cfg["remove_credits"])
         ttk.Checkbutton(right, text="移除製作名單等非歌詞內容", variable=self.v_credits).pack(anchor="w")
         ttk.Label(right, text="包括作曲、版權、開頭的歌名與歌手、前奏標示", style="Muted.TLabel").pack(anchor="w", padx=(self.px(24), 0))
+        row = ttk.Frame(right)
+        row.pack(anchor="w")
+        self.v_skip_albums = tk.BooleanVar(value=self.cfg["skip_albums"])
+        ttk.Checkbutton(row, text="專輯裡找不到的歌超過", variable=self.v_skip_albums).pack(side="left")
+        self.v_skip_ratio = tk.StringVar(value=f"{self.cfg['skip_album_ratio']}%")
+        ttk.Combobox(row, textvariable=self.v_skip_ratio, values=[f"{p}%" for p in (50, 60, 70, 80, 90)], state="readonly", width=5).pack(side="left", padx=self.px(6))
+        ttk.Label(row, text="時，略過整張專輯").pack(side="left")
+        ttk.Label(right, text=f"同一張專輯查過 {jobs.ALBUM_SAMPLE} 首以上才判斷，純音樂也算找不到；略過的歌記成查無歌詞", style="Muted.TLabel").pack(anchor="w", padx=(self.px(24), 0))
 
         ttk.Label(right, text="歌手別名", style="Title.TLabel").pack(anchor="w", pady=(self.px(14), self.px(5)))
         for line in ("歌手標籤包含等號左側的文字時，也會用右側的名稱查詢。每行一位歌手。", "例如：lisa ono = 小野リサ, Lisa Ono, 小野丽莎, 小野麗莎, Ono Lisa", "　　　Ichiko Aoba = 青葉市子, 青叶市子, あおばいちこ"):
@@ -385,7 +394,7 @@ class App:
             dialogs.showinfo("歌詞工具", "目前有工作正在進行，請等待完成或先按「停止」。")
             return False
         ctx = jobs.Ctx(lambda kind, payload: self.events.put((kind, payload)))
-        self.ctx, self.started = ctx, time.monotonic()
+        self.ctx, self.started, self.warned = ctx, time.monotonic(), set()
         self.set_running(True, name)
 
         def work():
@@ -422,6 +431,8 @@ class App:
                     self.status.configure(text=payload)
                 elif kind == "progress":
                     self.on_progress(*payload)
+                elif kind == "limited":
+                    self.warn_limited(payload)
                 elif kind == "done":
                     self.set_running(False)
                     self.refresh_all()
@@ -449,6 +460,16 @@ class App:
         if 5 <= done < total:
             left = (time.monotonic() - self.started) / done * (total - done)
             self.eta.configure(text=f"剩餘 {left / 3600:.1f} 小時" if left >= 3600 else f"剩餘 {max(left / 60, 1):.0f} 分鐘")
+
+    def warn_limited(self, label):
+        """Once per job and source: carrying on while the main sources refuse mostly piles up songs to ask again."""
+        if label in self.warned or self.closing:
+            return
+        self.warned.add(label)
+        text = (f"{label} 一直拒絕查詢，可能是短時間內查太多次，已暫停使用 10 分鐘。\n\n"
+                "其他來源會繼續查，這段期間的歌會留到最後再補問。建議先停止，過一段時間（例如一小時）再查。\n\n要現在停止查詢嗎？")
+        if dialogs.askyesno("來源被限流", text) and self.thread and self.thread.is_alive():
+            self.stop()
 
     def stop(self):
         if self.ctx:
@@ -566,6 +587,8 @@ class App:
         new["sources"] = {k: v.get() for k, v in self.v_sources.items()}
         new["to_traditional"] = self.v_tw.get()
         new["remove_credits"] = self.v_credits.get()
+        new["skip_albums"] = self.v_skip_albums.get()
+        new["skip_album_ratio"] = int(self.v_skip_ratio.get().rstrip("%"))
         new["aliases"] = aliases
         if not os.path.isdir(new["library"]):
             dialogs.showerror("歌詞工具", "找不到音樂資料夾。")

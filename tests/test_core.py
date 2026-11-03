@@ -295,7 +295,7 @@ class Files(unittest.TestCase):
         self.assertEqual(audio.restore_file(self.backup.folder, audio.read_index(self.backup.folder)[path]), "音訊與備份時不同")
 
     def config(self, **kw):
-        return {"library": self.lib, "backup_root": os.path.join(self.d, "bak"), "excluded": ["tea"], "aliases": {"歌手": ["歌手", "Singer"]}, "to_traditional": True, "remove_credits": True, "backup_enabled": True, "sources": {}, **kw}
+        return {"library": self.lib, "backup_root": os.path.join(self.d, "bak"), "excluded": ["tea"], "aliases": {"歌手": ["歌手", "Singer"]}, "to_traditional": True, "remove_credits": True, "backup_enabled": True, "skip_albums": False, "skip_album_ratio": 80, "sources": {}, **kw}
 
     def test_whole_flow(self):
         os.makedirs(os.path.join(self.lib, "tea"))
@@ -490,6 +490,24 @@ class Files(unittest.TestCase):
         self.assertEqual(other.calls, 3, "it already answered in the first round")
         self.assertEqual(ctx.waited, 60)
         self.assertEqual(store.reasons(), {"found": 3})
+
+    def test_an_album_nothing_has_lyrics_for_is_given_up(self):
+        for name in ("d.flac", "e.flac"):
+            shutil.copy(os.path.join(self.lib, "a.flac"), os.path.join(self.lib, name))
+        asked = Fake(None)
+        asked.calls = 0
+        asked.find = lambda q: setattr(asked, "calls", asked.calls + 1)
+        store, ctx = Store(os.path.join(self.d, "s.sqlite")), jobs.Ctx()
+        cfg = self.config(skip_albums=True, skip_album_ratio=80)
+        jobs.run_scan(store, cfg, ctx)
+        with mock.patch.object(jobs, "build_sources", lambda c, x: [asked]):
+            self.assertEqual(jobs.run_lookup(store, cfg, ctx), {"notfound": 3, "skipped": 2})
+        self.assertEqual(asked.calls, 3, "the last two songs were not asked")
+        self.assertEqual(store.reasons(), {"notfound": 5})
+        with mock.patch.object(jobs, "build_sources", lambda c, x: [Fake(None)]):
+            off = self.config()
+            store.db.execute("delete from lookups")
+            self.assertEqual(jobs.run_lookup(store, off, ctx), {"notfound": 5}, "switched off, every song is asked")
 
     def test_retries_give_up_and_stay_on_the_to_do_list(self):
         class Refuses:
