@@ -16,54 +16,64 @@ from lyricstool.clean import squash, sung_lines
 from lyricstool.sources import Busy, Kugou, NetEase, OnlineLrclib, Paused, QQMusic, make_query
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUTCOMES = ("找到", "純音樂", "找不到", "被拒絕", "暫停中", "出錯")
+OUTCOMES = ("找到", "純音樂", "找不到", "被拒絕", "出錯")
 
 
-def ask(source, songs, results):
+def ask(source, songs, results, stats):
+    """A resting source is waited for and asked the same song again, as the app asks it again later: every song gets a real answer."""
+    began, pauses = time.monotonic(), 0
     for n, song in enumerate(songs):
         q = make_query(song["歌手"], song["歌名"], song["專輯"], float(song["長度秒"]), "", {})
-        start = time.monotonic()
-        hit = None
-        try:
-            hit = source.find(q)
-            outcome = "純音樂" if hit and hit.instrumental else "找到" if hit else "找不到"
-        except Paused:
-            outcome = "暫停中"
-        except Busy:
-            outcome = "被拒絕"
-        except Exception as e:  # one malformed answer should not end a run of hundreds
-            outcome = "出錯"
-            print(f"{source.label} 出錯：{song['歌手']} - {song['歌名']}：{e!r}", file=sys.stderr)
+        while True:
+            start = time.monotonic()
+            hit = None
+            try:
+                hit = source.find(q)
+                outcome = "純音樂" if hit and hit.instrumental else "找到" if hit else "找不到"
+            except Paused:
+                pauses += 1
+                time.sleep(max(0, source.lim.suspended_until - time.monotonic()) + 1)
+                continue
+            except Busy:
+                outcome = "被拒絕"
+            except Exception as e:  # one malformed answer should not end a run of hundreds
+                outcome = "出錯"
+                print(f"{source.label} 出錯：{song['歌手']} - {song['歌名']}：{e!r}", file=sys.stderr)
+            break
         results[n][source.label] = (outcome, time.monotonic() - start, hit)
         if (n + 1) % 25 == 0:
             print(f"{source.label} {n + 1}/{len(songs)}", file=sys.stderr)
+    stats[source.label] = (pauses, (time.monotonic() - began) / 60)
 
 
 def bench(songs):
-    """One thread per source, as in the app, so each keeps its own pace; returns per song {source label: (outcome, seconds, hit)}."""
+    """One thread per source, as in the app, so each keeps its own pace. Returns per song {source label: (outcome, seconds, hit)},
+    and per source (times it was rested, minutes it took)."""
     ctx = jobs.Ctx(lambda kind, text: print(text, file=sys.stderr) if kind == "log" else None)
     sources = [NetEase(ctx), OnlineLrclib(ctx), QQMusic(ctx), Kugou(ctx)]
-    results = [{} for _ in songs]
-    threads = [threading.Thread(target=ask, args=(s, songs, results)) for s in sources]
+    results, stats = [{} for _ in songs], {}
+    threads = [threading.Thread(target=ask, args=(s, songs, results, stats)) for s in sources]
     for t in threads:
         t.start()
     for t in threads:
         t.join()
-    return [s.label for s in sources], results
+    return [s.label for s in sources], results, stats
 
 
 def pct(part, whole):
     return f"{part * 100 / whole:.0f}%" if whole else "-"
 
 
-def report(songs, labels, results):
+def report(songs, labels, results, stats):
     found = [{lab for lab, (outcome, _, _) in r.items() if outcome == "找到"} for r in results]
     print("\n各來源（每首都各自查詢）")
-    print("來源\t" + "\t".join(OUTCOMES) + "\t只有它找到\t平均秒數")
+    print("來源\t" + "\t".join(OUTCOMES) + "\t只有它找到\t平均秒數\t被暫停次數\t花了幾分鐘")
     for lab in labels:
         got = [r[lab][0] for r in results]
         only = sum(f == {lab} for f in found)
-        print(lab + "\t" + "\t".join(pct(got.count(o), len(got)) for o in OUTCOMES) + f"\t{only}\t{sum(r[lab][1] for r in results) / len(results):.1f}")
+        pauses, minutes = stats[lab]
+        print(lab + "\t" + "\t".join(pct(got.count(o), len(got)) for o in OUTCOMES)
+              + f"\t{only}\t{sum(r[lab][1] for r in results) / len(results):.1f}\t{pauses}\t{minutes:.0f}")
 
     print("\n找到同步歌詞的比例，依語言與熱門程度")
     print("語言\t熱門程度\t首數\t任一來源\t" + "\t".join(labels))
@@ -101,8 +111,8 @@ if __name__ == "__main__":
     with open(os.path.join(HERE, "bench_songs.csv"), encoding="utf-8") as fh:
         songs = list(csv.DictReader(fh))
     started = time.monotonic()
-    labels, results = bench(songs)
-    report(songs, labels, results)
+    labels, results, stats = bench(songs)
+    report(songs, labels, results, stats)
     out = os.path.join(HERE, "..", "build", time.strftime("bench-%Y%m%d-%H%M.csv"))
     os.makedirs(os.path.dirname(out), exist_ok=True)
     save(out, songs, labels, results)
