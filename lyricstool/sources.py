@@ -28,7 +28,10 @@ SUSPEND_SECONDS = 600
 QUICK_RETRY = 5  # seconds; a song can afford this much while the other sources are still answering it
 NOISE = re.compile(r"\s*[\(\[][^\)\]]*(remaster|explicit|feat|bonus|deluxe|mono|stereo|version|live|cd only)[^\)\]]*[\)\]]"
                    r"|\s+-\s+.*(remaster|explicit|mono|stereo|version|live).*$", re.I)
-SPLIT_ARTISTS = re.compile(r"\s*(?:,|&|、|/|;|；| x | X | feat\.? | ft\.? | featuring | with )\s*", re.I)
+# A language version is sung in other words, so it must not pass for the original, which loose title matching would allow.
+# shortcut: only these languages are recognised; add one when a version in another language turns up.
+LANGUAGES = re.compile(r"japanese|korean|chinese|mandarin|cantonese|english|spanish|tagalog|thai|french|portuguese|日本语|日文|中文|国语|粤语|韩文|英文|台语")
+SPLIT_ARTISTS =re.compile(r"\s*(?:,|&|、|/|;|；| x | X | feat\.? | ft\.? | featuring | with )\s*", re.I)
 
 
 class Busy(Exception):
@@ -97,6 +100,8 @@ def matches(q, artist_text, song_text, duration):
         return False
     a = fold(artist_text)
     if not any(fold(n) and (fold(n) in a or (len(fold(n)) >= 3 and fuzz.partial_ratio(fold(n), a) >= 90)) for n in q.names):
+        return False
+    if set(LANGUAGES.findall(fold(song_text))) != set(LANGUAGES.findall(fold(q.title))):
         return False
     s = fold(NOISE.sub("", song_text) or song_text)
     return any(fuzz.token_set_ratio(fold(t), s) >= 85 for t in q.titles)

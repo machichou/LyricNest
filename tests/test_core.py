@@ -126,6 +126,14 @@ class Matching(unittest.TestCase):
         self.assertFalse(matches(self.q, "Someone Else", "Tea For Two", 200))
         self.assertFalse(matches(self.q, "小野リサ", "Night and Day", 200))
 
+    def test_a_language_version_is_not_the_original(self):
+        q = make_query("HUNTR/X", "Golden (Tagalog Version)", "", 192, "", {})
+        self.assertFalse(matches(q, "HUNTR/X", "Golden", 193))
+        self.assertTrue(matches(q, "HUNTR/X", "Golden (Tagalog Version)", 193))
+        self.assertFalse(matches(make_query("HUNTR/X", "Golden", "", 192, "", {}), "HUNTR/X", "Golden (Tagalog Version)", 193))
+        self.assertTrue(matches(make_query("IVE", "Will (Korean Ver.)", "", 200, "", {}), "IVE", "Will -Korean ver.-", 200))
+        self.assertTrue(matches(make_query("鄧紫棋", "喜歡你 (粵語版)", "", 200, "", {}), "邓紫棋", "喜欢你 粤语", 200))
+
     def test_a_long_wait_rests_the_source_instead_of_holding_the_song(self):
         lim = Limiter("網易雲", 0, [60], jobs.Ctx())
 
