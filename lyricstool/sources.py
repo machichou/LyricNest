@@ -332,7 +332,8 @@ class NetEase:
     def _get(self, url):
         def fetch():
             d = _get_json(url, Referer="https://music.163.com/")
-            if not d or d.get("code") != 200:
+            # at times the search answers code 200 with `result` as a string, then normally again later: that is no answer, not "no such song"
+            if not d or d.get("code") != 200 or not isinstance(d.get("result", {}), dict):
                 raise Retry()
             return d
         return self.lim.call(fetch)

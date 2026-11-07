@@ -431,8 +431,8 @@ class App:
                     self.status.configure(text=payload)
                 elif kind == "progress":
                     self.on_progress(*payload)
-                elif kind == "limited":
-                    self.warn_limited(payload)
+                elif kind == "limited":  # the dialog waits for an answer; opened from here it would stop the log and progress meanwhile
+                    self.root.after_idle(self.warn_limited, payload)
                 elif kind == "done":
                     self.set_running(False)
                     self.refresh_all()

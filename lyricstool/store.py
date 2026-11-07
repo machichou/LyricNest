@@ -125,7 +125,7 @@ class Store:
     def lookup_targets(self, statuses, text=""):
         """Tracks that can take lyrics, whose last lookup status is one of `statuses` ('never' = not asked yet)."""
         marks = ",".join("?" * len(statuses))
-        sql = f"""select t.*,coalesce(l.status,'never') status from tracks t left join lookups l on l.path=t.path
+        sql = f"""select t.*,coalesce(l.status,'never') status,l.source from tracks t left join lookups l on l.path=t.path
                   where t.state in('none','plain') and coalesce(l.status,'never') in ({marks})"""
         args = list(statuses)
         if text:

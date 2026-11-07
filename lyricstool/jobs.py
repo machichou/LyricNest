@@ -17,6 +17,10 @@ log = logging.getLogger("lyricstool")
 MAX_PASSES = 3
 SONG_SECONDS = 45  # a source that has not answered a song by then counts as busy for it, and the song is asked again later
 ALBUM_SAMPLE = 3  # songs of an album answered before it can be given up on, so one odd track does not settle it
+# A song asked again waits this long for its resting source. Rests after a refusal are at most this long; a longer one means the source
+# was suspended for refusing again and again, and the round ends rather than wait it out song by song.
+RETRY_PATIENCE = 180
+INSTRUMENTAL_NOTE = "；純音樂："  # in a busy song's lookup row, after the sources that still owe an answer
 KIND_NAMES = {"new": "新歌詞", "cleanup": "清理製作名單"}
 
 
@@ -180,7 +184,9 @@ def lookup_one(sources, track, cfg, store, ctx, failed=None, lanes=None):
     settled, answers = threading.Event(), Queue()
     for s in sources:
         lanes[s].ask(q, settled, answers)
-    waiting, instrumental = list(sources), ""
+    prev = store.db.execute("select status,source from lookups where path=?", (track["path"],)).fetchone()
+    # asked again because a source was busy: an earlier "instrumental" from the others still stands if this one finds nothing either
+    waiting, instrumental = list(sources), read_busy_note(prev["source"])[1] if prev and prev["status"] == "busy" else ""
     deadline = time.monotonic() + SONG_SECONDS
     try:
         while waiting:
@@ -218,15 +224,27 @@ def lookup_one(sources, track, cfg, store, ctx, failed=None, lanes=None):
         if own:
             for lane in lanes.values():
                 lane.close()
-    status = "instrumental" if instrumental else "busy" if failed else "notfound"
-    store.save_lookup(track["path"], status, instrumental)
+    status = "busy" if failed else "instrumental" if instrumental else "notfound"
+    note = "、".join(s.label for s in failed) + (INSTRUMENTAL_NOTE + instrumental if instrumental else "") if failed else instrumental
+    store.save_lookup(track["path"], status, note)
     return status
+
+
+def read_busy_note(note):
+    """(labels of the sources that still owe an answer, the source that said instrumental) from a busy song's lookup row."""
+    owed, _, instrumental = (note or "").partition(INSTRUMENTAL_NOTE)
+    return (owed.split("、") if owed else []), instrumental
+
+
+def resting(sources):
+    """Seconds until every one of these sources is back in use."""
+    now = time.monotonic()
+    return max([0] + [s.lim.suspended_until - now for s in sources if hasattr(s, "lim")])
 
 
 def retry_wait(queue):
     """Seconds until every source these tracks are waiting on is back in use; at least a minute, so a brief hiccup gets a moment to pass."""
-    now = time.monotonic()
-    return max([60] + [s.lim.suspended_until - now for _, failed in queue for s in failed if hasattr(s, "lim")])
+    return max([60] + [resting(failed) for _, failed in queue])
 
 
 def run_lookup(store, cfg, ctx, statuses=("never", "busy"), text=""):
@@ -245,7 +263,12 @@ def run_lookup(store, cfg, ctx, statuses=("never", "busy"), text=""):
     ctx.log("同時查詢的來源：" + "、".join(s.label for s in sources))
     counts = {}
     total = len(targets)
-    queue = [(t, sources) for t in targets]
+
+    def owed_by(t):  # left busy last time: only the sources that still owed an answer, unless none of them is switched on any more
+        owed = read_busy_note(t["source"])[0] if t["status"] == "busy" else []
+        return [s for s in sources if s.label in owed] or sources
+
+    queue = [(t, owed_by(t)) for t in targets]
     lanes = {s: Lane(s) for s in sources}
     albums, given_up = {}, set()  # by folder: [songs answered, songs nothing had lyrics for]
     try:
@@ -253,6 +276,9 @@ def run_lookup(store, cfg, ctx, statuses=("never", "busy"), text=""):
             retry = []
             for n, (t, asking) in enumerate(queue, 1):
                 if ctx.cancelled():
+                    left = len(retry) + (len(queue) - n + 1 if round_no > 1 else 0)  # after the first round, songs not reached are still busy
+                    if left:
+                        counts["busy"] = left
                     ctx.log(f"已停止。查詢結果已儲存，下次會接續查詢：{summary(counts)}")
                     return counts
                 if not os.path.exists(t["path"]):
@@ -262,10 +288,20 @@ def run_lookup(store, cfg, ctx, statuses=("never", "busy"), text=""):
                     store.save_lookup(t["path"], "notfound", "整張專輯略過")
                     counts["skipped"] = counts.get("skipped", 0) + 1
                     continue
+                if round_no > 1:
+                    rest = resting(asking)
+                    if rest > RETRY_PATIENCE:
+                        ctx.log(f"{'、'.join(s.label for s in asking)} 仍在休息，剩下 {len(queue) - n + 1} 首留到下一輪")
+                        retry += queue[n - 1:]
+                        break
+                    if rest:  # asked while resting, the song would be marked busy at once without the source ever being asked
+                        ctx.wait(rest + 1, "等待來源恢復，{} 秒後重查")
                 ctx.progress(total - len(queue) + n - 1, total, f"{t['artist']} - {t['title']}")
                 failed = {}
                 status = lookup_one(asking, t, cfg, store, ctx, failed, lanes)
-                if status is None:
+                if status is None:  # stopped mid-song
+                    if round_no > 1:
+                        retry.append((t, asking))
                     continue
                 why = "（" + "、".join(f"{s.label} {reason}" for s, reason in failed.items()) + "）" if status == "busy" else ""
                 ctx.log(f"{LABELS.get(status, status)}{why}：{t['artist'] or t['album_artist']} - {t['title']}")

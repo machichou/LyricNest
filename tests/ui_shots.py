@@ -356,11 +356,16 @@ with mock.patch("lyricstool.app.dialogs") as box, mock.patch("lyricstool.app.fil
     # A source that keeps refusing asks once per job whether to stop.
     box.askyesno.reset_mock()
     box.askyesno.return_value = False
+    log_when_asked = []
+    box.askyesno.side_effect = lambda *a: log_when_asked.append("問題之後的記錄" in app.log_box.get("1.0", "end")) or False
     app.events.put(("limited", "網易雲"))
     app.events.put(("limited", "網易雲"))
+    app.events.put(("log", "問題之後的記錄"))
     pump()
+    box.askyesno.side_effect = None
     check("rate limit asked about once", box.askyesno.call_count, 1)
     check("the question names the source", "網易雲" in box.askyesno.call_args[0][1], True)
+    check("the log keeps going while the question waits", log_when_asked, [True])
 
     # Progress wording.
     app.started = time.monotonic() - 60

@@ -16,7 +16,7 @@ from unittest import mock
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from lyricstool import audio, jobs
 from lyricstool.clean import clean_lrc, is_credit, strip_credits
-from lyricstool.sources import Busy, Hit, Lane, Limiter, Paused, OnlineLrclib, QQMusic, Retry, build_sources, Sidecar, make_query, matches, names_for, usable
+from lyricstool.sources import Busy, Hit, Lane, Limiter, NetEase, Paused, OnlineLrclib, QQMusic, Retry, build_sources, Sidecar, make_query, matches, names_for, usable
 from lyricstool.store import Store, default_config, text_hash
 
 
@@ -192,6 +192,23 @@ class Matching(unittest.TestCase):
         with mock.patch("lyricstool.sources._get_json", side_effect=reply):
             hit = src.find(self.q)
         self.assertEqual((hit.lrc, hit.matched_length), (LRC, 200))
+
+    def test_netease_answering_result_as_text_is_a_refusal(self):
+        def reply(url, **headers):
+            if "search" in url:
+                return {"code": 200, "result": songs}
+            return {"code": 200, "lrc": {"lyric": LRC}}  # the lyric request has no `result` at all
+
+        src = NetEase(jobs.Ctx())
+        src.lim.delay = 0
+        songs = "x"
+        with mock.patch("lyricstool.sources._get_json", side_effect=reply):
+            with self.assertRaises(Busy):
+                src.find(self.q)
+            self.assertGreater(src.lim.suspended_until, time.monotonic(), "it rests like after any refusal")
+            src.lim.suspended_until = 0
+            songs = {"songs": [{"id": 1, "name": "Tea For Two", "artists": [{"name": "小野リサ"}], "duration": 200000}]}
+            self.assertEqual(src.find(self.q).lrc, LRC)
 
     def test_sources_ask_netease_before_lrclib(self):
         cfg = {"sources": {"sidecar": True, "lrcget": True, "lrclib": True, "netease": True, "qq": True, "kugou": True}, "lrcget_db": "", "lrclib_db": ""}
@@ -443,6 +460,21 @@ class Files(unittest.TestCase):
         self.assertTrue(store.pending_items()[0]["source"].startswith("乙"))
         self.assertEqual(jobs.lookup_one([says_none, Fake(None)], self.track(store, "b.mp3"), cfg, store, ctx), "instrumental")
 
+    def test_a_busy_source_is_asked_again_even_after_another_says_instrumental(self):
+        class Refuses:
+            label = "限流"
+
+            def find(self, q):
+                raise jobs.Busy("限流")
+
+        store, cfg, ctx = Store(os.path.join(self.d, "s.sqlite")), self.config(), jobs.Ctx()
+        jobs.run_scan(store, cfg, ctx)
+        says_none = Fake(Hit("甲", instrumental=True))
+        for name in ("a.flac", "b.mp3"):
+            self.assertEqual(jobs.lookup_one([says_none, Refuses()], self.track(store, name), cfg, store, ctx), "busy")
+        self.assertEqual(jobs.lookup_one([Fake(None)], self.track(store, "a.flac"), cfg, store, ctx), "instrumental", "the earlier answer still counts")
+        self.assertEqual(jobs.lookup_one([Fake(Hit("乙", LRC, matched_title="歌名", matched_length=2.0))], self.track(store, "b.mp3"), cfg, store, ctx), "found")
+
     def test_throttled_source_means_ask_again_not_missing(self):
         class Refuses:
             label = "限流"
@@ -532,10 +564,85 @@ class Files(unittest.TestCase):
         jobs.run_scan(store, cfg, ctx)
         logs = []
         ctx.emit = lambda kind, text: logs.append(text) if kind == "log" else None
-        with mock.patch.object(jobs, "build_sources", lambda c, x: [Refuses()]):
+        says_none = Fake(Hit("甲", instrumental=True))
+        with mock.patch.object(jobs, "build_sources", lambda c, x: [Refuses(), says_none]):
             self.assertEqual(jobs.run_lookup(store, cfg, ctx), {"busy": 3})
         self.assertTrue(any(line.startswith("待重查（一直限流 忙碌）：") for line in logs), "the log says which source and why")
-        self.assertEqual(len(store.lookup_targets(("never", "busy"))), 3)
+        targets = store.lookup_targets(("never", "busy"))
+        self.assertEqual([t["source"] for t in targets], ["一直限流；純音樂：甲"] * 3, "which source is owed, and what the others said")
+
+        class Answers:
+            label = "一直限流"
+
+            def find(self, q):
+                return None
+
+        class Counting(Fake):
+            calls = 0
+
+            def find(self, q):
+                self.calls += 1
+
+        other = Counting(None)
+        with mock.patch.object(jobs, "build_sources", lambda c, x: [Answers(), other]):
+            self.assertEqual(jobs.run_lookup(store, cfg, ctx), {"instrumental": 3}, "the next run settles them with the earlier answer")
+        self.assertEqual(other.calls, 0, "a source that already answered is not asked again")
+
+    def test_stopping_counts_the_songs_still_to_ask_again(self):
+        class Refuses:
+            label = "一直限流"
+
+            def find(self, q):
+                raise jobs.Busy("限流")
+
+        class StopsWhileWaiting(jobs.Ctx):
+            def wait(self, seconds, template):
+                self.cancel()
+
+        store, cfg, ctx = Store(os.path.join(self.d, "s.sqlite")), self.config(), StopsWhileWaiting()
+        jobs.run_scan(store, cfg, ctx)
+        logs = []
+        ctx.emit = lambda kind, text: logs.append(text) if kind == "log" else None
+        with mock.patch.object(jobs, "build_sources", lambda c, x: [Refuses()]):
+            self.assertEqual(jobs.run_lookup(store, cfg, ctx), {"busy": 3})
+        self.assertEqual(logs[-1], "已停止。查詢結果已儲存，下次會接續查詢：待重查 3 首")
+
+    def test_a_round_of_asking_again_waits_out_a_short_rest_but_not_a_long_one(self):
+        class Rests:
+            label = "會休息"
+
+            def __init__(self, rest):
+                self.lim, self.rest = Limiter("會休息", 0, [], jobs.Ctx()), rest
+                self.replies = ["refuse", "refuse"] + [Hit("會休息", LRC, matched_title="歌名", matched_length=2.0)] * 3
+
+            def find(self, q):
+                if self.lim.suspended_until > time.monotonic():
+                    raise Paused(self.label)
+                reply = self.replies.pop(0)
+                if reply == "refuse":
+                    self.lim.suspended_until = time.monotonic() + self.rest
+                    raise Busy(self.label)
+                return reply
+
+        for rest in (60, 600):
+            src = Rests(rest)
+
+            class TimePasses(jobs.Ctx):
+                def wait(self, seconds, template):
+                    src.lim.suspended_until = 0
+
+            store, cfg, ctx = Store(os.path.join(self.d, f"{rest}.sqlite")), self.config(), TimePasses()
+            jobs.run_scan(store, cfg, ctx)
+            logs = []
+            ctx.emit = lambda kind, text: logs.append(text) if kind == "log" else None
+            with mock.patch.object(jobs, "build_sources", lambda c, x: [src]):
+                self.assertEqual(jobs.run_lookup(store, cfg, ctx), {"found": 3})
+            if rest == 60:
+                rounds = [i for i, line in enumerate(logs) if "輪）" in line]
+                self.assertEqual(sum(line.startswith("找到") for line in logs[rounds[0]:rounds[1]]), 2, "after the first song's refusal, the other two wait and are found")
+                self.assertFalse(any("仍在休息" in line for line in logs))
+            else:
+                self.assertIn("會休息 仍在休息，剩下 2 首留到下一輪", logs, "a long rest ends the round instead of being waited out")
 
     def test_exports_can_be_read_back(self):
         store, cfg, ctx = Store(os.path.join(self.d, "s.sqlite")), self.config(), jobs.Ctx()
