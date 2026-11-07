@@ -207,7 +207,7 @@ class Matching(unittest.TestCase):
                 src.find(self.q)
             self.assertGreater(src.lim.suspended_until, time.monotonic(), "it rests like after any refusal")
             src.lim.suspended_until = 0
-            songs = {"songs": [{"id": 1, "name": "Tea For Two", "artists": [{"name": "小野リサ"}], "duration": 200000}]}
+            songs = {"songs": [{"id": 1, "name": "Tea For Two", "ar": [{"name": "小野リサ"}], "dt": 200000}]}
             self.assertEqual(src.find(self.q).lrc, LRC)
 
     def test_alias_prompt_names_each_artist_without_an_alias_once(self):
@@ -658,6 +658,13 @@ class Files(unittest.TestCase):
                 self.assertFalse(any("仍在休息" in line for line in logs))
             else:
                 self.assertIn("會休息 仍在休息，剩下 2 首留到下一輪", logs, "a long rest ends the round instead of being waited out")
+                src = Rests(rest)
+                store = Store(os.path.join(self.d, "last.sqlite"))
+                jobs.run_scan(store, cfg, ctx)
+                logs.clear()
+                with mock.patch.object(jobs, "build_sources", lambda c, x: [src]), mock.patch.object(jobs, "MAX_PASSES", 2):
+                    self.assertEqual(jobs.run_lookup(store, cfg, ctx), {"busy": 3})
+                self.assertIn("會休息 仍在休息，剩下 2 首留到下次查詢", logs, "the last round has no next round to leave them to")
 
     def test_exports_can_be_read_back(self):
         store, cfg, ctx = Store(os.path.join(self.d, "s.sqlite")), self.config(), jobs.Ctx()

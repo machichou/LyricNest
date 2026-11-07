@@ -341,15 +341,15 @@ class NetEase:
     def find(self, q):
         instrumental = None
         for name in q.names[:2]:
-            d = self._get("https://music.163.com/api/search/get/web?" + urllib.parse.urlencode({"s": f"{name} {q.search_title}", "type": 1, "limit": 20}))
+            # search/get/web refused this endpoint alone for over half an hour ("操作频繁", code 405) while cloudsearch kept answering
+            d = self._get("https://music.163.com/api/cloudsearch/pc?" + urllib.parse.urlencode({"s": f"{name} {q.search_title}", "type": 1, "limit": 20}))
             for s in (d.get("result") or {}).get("songs") or []:
-                art = "/".join(a["name"] for a in s.get("artists") or []) + " " + " ".join(s.get("alias") or [])
-                dur = (s.get("duration") or 0) / 1000
-                if not matches(q, art, s["name"], dur):
+                who = "/".join(a["name"] for a in s.get("ar") or [])
+                dur = (s.get("dt") or 0) / 1000
+                if not matches(q, who + " " + " ".join(s.get("alia") or []), s["name"], dur):
                     continue
                 ly = self._get(f"https://music.163.com/api/song/lyric?id={s['id']}&lv=1&tv=-1")
                 lrc = (ly.get("lrc") or {}).get("lyric") or ""
-                who = "/".join(a["name"] for a in s.get("artists") or [])
                 if usable(lrc, q.length):
                     return Hit(self.label, lrc, matched_artist=who, matched_title=s["name"], matched_length=round(dur, 1))
                 if ly.get("nolyric") or is_placeholder(lrc):

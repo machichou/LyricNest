@@ -291,7 +291,7 @@ def run_lookup(store, cfg, ctx, statuses=("never", "busy"), text=""):
                 if round_no > 1:
                     rest = resting(asking)
                     if rest > RETRY_PATIENCE:
-                        ctx.log(f"{'、'.join(s.label for s in asking)} 仍在休息，剩下 {len(queue) - n + 1} 首留到下一輪")
+                        ctx.log(f"{'、'.join(s.label for s in asking)} 仍在休息，剩下 {len(queue) - n + 1} 首留到{'下一輪' if round_no < MAX_PASSES else '下次查詢'}")
                         retry += queue[n - 1:]
                         break
                     if rest:  # asked while resting, the song would be marked busy at once without the source ever being asked
