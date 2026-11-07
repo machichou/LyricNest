@@ -16,7 +16,7 @@ from .store import text_hash
 log = logging.getLogger("lyricstool")
 MAX_PASSES = 3
 SONG_SECONDS = 45  # a source that has not answered a song by then counts as busy for it, and the song is asked again later
-ALBUM_SAMPLE = 3  # songs of an album answered before it can be given up on, so one odd track does not settle it
+ALBUM_SAMPLE = 3  # an album is given up on only when this many of its songs all come back without lyrics, so one odd track does not settle it
 # A song asked again waits this long for its resting source. Rests after a refusal are at most this long; a longer one means the source
 # was suspended for refusing again and again, and the round ends rather than wait it out song by song.
 RETRY_PATIENCE = 180
@@ -313,9 +313,10 @@ def run_lookup(store, cfg, ctx, statuses=("never", "busy"), text=""):
                     tally = albums.setdefault(album, [0, 0])
                     tally[0] += 1
                     tally[1] += status in ("notfound", "instrumental")
-                    if tally[0] >= ALBUM_SAMPLE and tally[1] * 100 > cfg["skip_album_ratio"] * tally[0]:
+                    # decided once: albums that are mostly sung but miss a few songs are common, and a share of misses gave up on them too
+                    if tally == [ALBUM_SAMPLE, ALBUM_SAMPLE]:
                         given_up.add(album)
-                        ctx.log(f"略過整張專輯（查過 {tally[0]} 首，{tally[1]} 首找不到）：{t['album'] or os.path.basename(album)}")
+                        ctx.log(f"略過整張專輯（前 {ALBUM_SAMPLE} 首都找不到）：{t['album'] or os.path.basename(album)}")
             ctx.progress(total - len(retry), total, "")
             queue = retry
             if not queue:

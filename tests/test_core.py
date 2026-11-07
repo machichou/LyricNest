@@ -320,7 +320,7 @@ class Files(unittest.TestCase):
         self.assertEqual(audio.restore_file(self.backup.folder, audio.read_index(self.backup.folder)[path]), "音訊與備份時不同")
 
     def config(self, **kw):
-        return {"library": self.lib, "backup_root": os.path.join(self.d, "bak"), "excluded": ["tea"], "aliases": {"歌手": ["歌手", "Singer"]}, "to_traditional": True, "remove_credits": True, "backup_enabled": True, "skip_albums": False, "skip_album_ratio": 80, "sources": {}, **kw}
+        return {"library": self.lib, "backup_root": os.path.join(self.d, "bak"), "excluded": ["tea"], "aliases": {"歌手": ["歌手", "Singer"]}, "to_traditional": True, "remove_credits": True, "backup_enabled": True, "skip_albums": False, "sources": {}, **kw}
 
     def test_whole_flow(self):
         os.makedirs(os.path.join(self.lib, "tea"))
@@ -538,7 +538,7 @@ class Files(unittest.TestCase):
         asked.calls = 0
         asked.find = lambda q: setattr(asked, "calls", asked.calls + 1)
         store, ctx = Store(os.path.join(self.d, "s.sqlite")), jobs.Ctx()
-        cfg = self.config(skip_albums=True, skip_album_ratio=80)
+        cfg = self.config(skip_albums=True)
         jobs.run_scan(store, cfg, ctx)
         with mock.patch.object(jobs, "build_sources", lambda c, x: [asked]):
             self.assertEqual(jobs.run_lookup(store, cfg, ctx), {"notfound": 3, "skipped": 2})
@@ -548,6 +548,16 @@ class Files(unittest.TestCase):
             off = self.config()
             store.db.execute("delete from lookups")
             self.assertEqual(jobs.run_lookup(store, off, ctx), {"notfound": 5}, "switched off, every song is asked")
+        class FindsOnlyTheFirst:
+            label = "只找到一首"
+            replies = [Hit("乙", LRC, matched_title="歌名", matched_length=2.0)]
+
+            def find(self, q):
+                return self.replies.pop() if self.replies else None
+
+        with mock.patch.object(jobs, "build_sources", lambda c, x: [FindsOnlyTheFirst()]):
+            store.db.execute("delete from lookups")
+            self.assertEqual(jobs.run_lookup(store, cfg, ctx), {"found": 1, "notfound": 4}, "one song found among the first three: the whole album is asked")
 
     def test_retries_give_up_and_stay_on_the_to_do_list(self):
         class Refuses:

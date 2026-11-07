@@ -370,14 +370,9 @@ class App:
         self.v_credits = tk.BooleanVar(value=self.cfg["remove_credits"])
         ttk.Checkbutton(right, text="移除製作名單等非歌詞內容", variable=self.v_credits).pack(anchor="w")
         ttk.Label(right, text="包括作曲、版權、開頭的歌名與歌手、前奏標示", style="Muted.TLabel").pack(anchor="w", padx=(self.px(24), 0))
-        row = ttk.Frame(right)
-        row.pack(anchor="w")
         self.v_skip_albums = tk.BooleanVar(value=self.cfg["skip_albums"])
-        ttk.Checkbutton(row, text="專輯裡找不到的歌超過", variable=self.v_skip_albums).pack(side="left")
-        self.v_skip_ratio = tk.StringVar(value=f"{self.cfg['skip_album_ratio']}%")
-        ttk.Combobox(row, textvariable=self.v_skip_ratio, values=[f"{p}%" for p in range(20, 100, 10)], state="readonly", width=5).pack(side="left", padx=self.px(6))
-        ttk.Label(row, text="時，略過整張專輯").pack(side="left")
-        ttk.Label(right, text=f"同一張專輯查過 {jobs.ALBUM_SAMPLE} 首以上才判斷，純音樂也算找不到；略過的歌記成查無歌詞", style="Muted.TLabel").pack(anchor="w", padx=(self.px(24), 0))
+        ttk.Checkbutton(right, text=f"專輯前 {jobs.ALBUM_SAMPLE} 首都找不到時，略過整張專輯", variable=self.v_skip_albums).pack(anchor="w")
+        ttk.Label(right, text=f"純音樂也算找不到；前 {jobs.ALBUM_SAMPLE} 首有任何一首找到，整張都會查；略過的歌記成查無歌詞", style="Muted.TLabel").pack(anchor="w", padx=(self.px(24), 0))
 
         ttk.Label(right, text="歌手別名", style="Title.TLabel").pack(anchor="w", pady=(self.px(14), self.px(5)))
         for line in ("歌手標籤包含等號左側的文字時，也會用右側的名稱查詢。每行一位歌手。", "例如：lisa ono = 小野リサ, Lisa Ono, 小野丽莎, 小野麗莎, Ono Lisa", "　　　Ichiko Aoba = 青葉市子, 青叶市子, あおばいちこ"):
@@ -588,7 +583,6 @@ class App:
         new["to_traditional"] = self.v_tw.get()
         new["remove_credits"] = self.v_credits.get()
         new["skip_albums"] = self.v_skip_albums.get()
-        new["skip_album_ratio"] = int(self.v_skip_ratio.get().rstrip("%"))
         new["aliases"] = aliases
         if not os.path.isdir(new["library"]):
             dialogs.showerror("歌詞工具", "找不到音樂資料夾。")
