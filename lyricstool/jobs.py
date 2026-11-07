@@ -10,7 +10,7 @@ from queue import Empty, Queue
 
 from . import audio
 from .clean import clean_lrc, is_synced, last_stamp, lyric_state, squash, strip_credits, sung_lines
-from .sources import Busy, Lane, Paused, build_sources, make_query
+from .sources import SPLIT_ARTISTS, Busy, Lane, Paused, build_sources, make_query
 from .store import text_hash
 
 log = logging.getLogger("lyricstool")
@@ -468,3 +468,21 @@ def export_missing(rows, path):
         for r in rows:
             state = {"plain": "純文字", "none": "沒有", "unsupported": "不支援的格式", "unreadable": "無法讀取"}.get(r["state"], r["state"])
             w.writerow([r["artist"], r["title"], r["album"], state, r["ext"], names.get(r["status"], r["status"]), r["path"]])
+
+ALIAS_PROMPT = """現在要查找歌手別名。格式是每行一位歌手：等號左邊是我音樂標籤上的歌手名稱，右邊是這位歌手在各音樂平台可能用的名稱，用逗號分隔，包括原文、英文或羅馬拼音、簡體和繁體寫法。例如：
+lisa ono = 小野リサ, Lisa Ono, 小野丽莎, 小野麗莎, Ono Lisa
+蛋堡 = 蛋堡, Soft Lipa, Soft Lipapa
+青葉市子 = 青葉市子, Ichiko Aoba, 青叶市子, あおばいちこ
+
+請你找出下列歌手的別名，並依照上面的格式輸出。等號左邊照抄我給的名稱；沒有其他名稱或不確定的歌手不要列出，也不要猜；只輸出這些行，不要加其他說明。
+
+"""
+
+
+def alias_prompt(artists, aliases):
+    """Text to paste into any AI chat, asking for aliases of every artist that has none yet; and how many artists it names.
+    Tags naming several artists are split, as lookups split them, and an artist counts as covered as lookups match aliases."""
+    keys = [k.lower() for k in aliases]
+    names = dict.fromkeys(p.strip() for a in artists for p in SPLIT_ARTISTS.split(a) if p.strip())
+    wanted = sorted((n for n in names if not any(k in n.lower() for k in keys)), key=str.casefold)
+    return ALIAS_PROMPT + "\n".join(wanted), len(wanted)

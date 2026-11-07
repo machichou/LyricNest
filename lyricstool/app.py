@@ -36,6 +36,18 @@ def split_names(text):
     return [x.strip() for x in re.split("[,，、]", text) if x.strip()]
 
 
+def parse_aliases(text):
+    """The alias box: one artist per line, 'tag text = name, name'."""
+    aliases = {}
+    for line in text.replace("＝", "=").splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            names = split_names(v)
+            if k.strip() and names:
+                aliases[k.strip()] = names
+    return aliases
+
+
 def track_names(r):
     """A file without tags, or one that could not be read, still needs a line of its own."""
     return r["artist"] or r["album_artist"], r["title"] or os.path.basename(r["path"])
@@ -374,7 +386,10 @@ class App:
         ttk.Checkbutton(right, text=f"專輯前 {jobs.ALBUM_SAMPLE} 首都找不到時，略過整張專輯", variable=self.v_skip_albums).pack(anchor="w")
         ttk.Label(right, text=f"純音樂也算找不到；前 {jobs.ALBUM_SAMPLE} 首有任何一首找到，整張都會查；略過的歌記成查無歌詞", style="Muted.TLabel").pack(anchor="w", padx=(self.px(24), 0))
 
-        ttk.Label(right, text="歌手別名", style="Title.TLabel").pack(anchor="w", pady=(self.px(14), self.px(5)))
+        row = ttk.Frame(right)
+        row.pack(fill="x", pady=(self.px(14), self.px(5)))
+        ttk.Label(row, text="歌手別名", style="Title.TLabel").pack(side="left")
+        ttk.Button(row, text="複製給 AI 的提示詞", command=self.copy_alias_prompt).pack(side="right")
         for line in ("歌手標籤包含等號左側的文字時，也會用右側的名稱查詢。每行一位歌手。", "例如：lisa ono = 小野リサ, Lisa Ono, 小野丽莎, 小野麗莎, Ono Lisa", "　　　Ichiko Aoba = 青葉市子, 青叶市子, あおばいちこ"):
             ttk.Label(right, text=line, style="Muted.TLabel").pack(anchor="w", pady=(0, self.px(6)))  # separate labels: a single multi-line one has no line spacing to set
         wrap = self.card(right)
@@ -565,17 +580,21 @@ class App:
             self.start("還原", lambda ctx: jobs.run_restore(self.store, self.cfg, ctx, folder, paths),
                        lambda r: dialogs.showinfo("還原完成", f"已還原 {r['done']} 首，略過 {len(r['skipped'])} 首。"))
 
+    def copy_alias_prompt(self):
+        text, n = jobs.alias_prompt(self.store.artists(), parse_aliases(self.alias_box.get("1.0", "end")))
+        if not n:
+            dialogs.showinfo("歌詞工具", "曲庫裡的歌手都已經有別名了。")
+            return
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        dialogs.showinfo("歌詞工具", f"已複製提示詞，列出 {n} 位還沒有別名的歌手。\n\n"
+                                    "貼給你常用的 AI（例如 ChatGPT、Claude），把它回覆的每一行貼到下方的歌手別名，再按「儲存設定」。")
+
     def save_settings(self):
         if self.thread and self.thread.is_alive():
             dialogs.showinfo("歌詞工具", "目前有工作正在進行，請等待完成或先按「停止」，再儲存設定。")
             return
-        aliases = {}
-        for line in self.alias_box.get("1.0", "end").replace("＝", "=").splitlines():
-            if "=" in line:
-                k, v = line.split("=", 1)
-                names = split_names(v)
-                if k.strip() and names:
-                    aliases[k.strip()] = names
+        aliases = parse_aliases(self.alias_box.get("1.0", "end"))
         new = dict(self.cfg)
         new.update({k: v.get().strip() for k, v in self.v_paths.items()})
         new["excluded"] = split_names(self.v_excluded.get())

@@ -121,6 +121,11 @@ class Store:
         return self.db.execute("""select t.artist,count(*) n from tracks t join lookups l on l.path=t.path
                                   where t.state in('none','plain') and l.status='notfound' and t.artist<>'' group by t.artist order by n desc limit ?""", (limit,)).fetchall()
 
+    def artists(self):
+        """Every artist tag, the album artist where a track has none, as lookups take it."""
+        return [r[0] for r in self.db.execute("""select distinct coalesce(nullif(artist,''),album_artist) a from tracks
+                                                 where a<>'' order by a collate nocase""")]
+
     def lookup_targets(self, statuses, text=""):
         """Tracks that can take lyrics, whose last lookup status is one of `statuses` ('never' = not asked yet)."""
         marks = ",".join("?" * len(statuses))

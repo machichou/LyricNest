@@ -210,6 +210,11 @@ class Matching(unittest.TestCase):
             songs = {"songs": [{"id": 1, "name": "Tea For Two", "artists": [{"name": "小野リサ"}], "duration": 200000}]}
             self.assertEqual(src.find(self.q).lrc, LRC)
 
+    def test_alias_prompt_names_each_artist_without_an_alias_once(self):
+        text, n = jobs.alias_prompt(["Lisa Ono", "陳綺貞", "方大同 feat. 张靓颖", "Lisa Ono & 陳綺貞"], {"lisa ono": ["小野リサ"]})
+        self.assertTrue(text.startswith(jobs.ALIAS_PROMPT))
+        self.assertEqual((text[len(jobs.ALIAS_PROMPT):].split("\n"), n), (["张靓颖", "方大同", "陳綺貞"], 3))
+
     def test_sources_ask_netease_before_lrclib(self):
         cfg = {"sources": {"sidecar": True, "lrcget": True, "lrclib": True, "netease": True, "qq": True, "kugou": True}, "lrcget_db": "", "lrclib_db": ""}
         self.assertEqual([s.label for s in build_sources(cfg, jobs.Ctx())], [".lrc 外掛檔", "網易雲", "LRCLIB（線上）", "QQ 音樂", "酷狗"])
