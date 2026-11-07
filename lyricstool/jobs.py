@@ -469,12 +469,37 @@ def export_missing(rows, path):
             state = {"plain": "純文字", "none": "沒有", "unsupported": "不支援的格式", "unreadable": "無法讀取"}.get(r["state"], r["state"])
             w.writerow([r["artist"], r["title"], r["album"], state, r["ext"], names.get(r["status"], r["status"]), r["path"]])
 
-ALIAS_PROMPT = """現在要查找歌手別名。格式是每行一位歌手：等號左邊是我音樂標籤上的歌手名稱，右邊是這位歌手在各音樂平台可能用的名稱，用逗號分隔，包括原文、英文或羅馬拼音、簡體和繁體寫法。例如：
-lisa ono = 小野リサ, Lisa Ono, 小野丽莎, 小野麗莎, Ono Lisa
-蛋堡 = 蛋堡, Soft Lipa, Soft Lipapa
-青葉市子 = 青葉市子, Ichiko Aoba, 青叶市子, あおばいちこ
 
-請你找出下列歌手的別名，並依照上面的格式輸出。等號左邊照抄我給的名稱；沒有其他名稱或不確定的歌手不要列出，也不要猜；只輸出這些行，不要加其他說明。
+# Written for how aliases are used: only the first two names are searched (LRCLIB takes the tag and the first), every name is compared
+# loosely against the artist a source returns, and Simplified/Traditional, case and accents are already handled. So the other name goes
+# first, the tag second, and guesses are worse than nothing.
+ALIAS_PROMPT = """請幫我整理歌手的別名，給歌詞查詢工具使用。工具會拿這些名稱到 LRCLIB、網易雲音樂、QQ 音樂、酷狗等平台搜尋歌詞，但每位歌手只會用前兩個名稱搜尋。
+
+輸出格式：每行一位歌手，寫成「歌手 = 名稱1, 名稱2, 名稱3」。
+- 等號左邊：照抄我給的名稱，一個字都不要改。
+- 名稱1：這位歌手在音樂平台上最常用、而且和左邊不同的名稱，例如原文名稱、官方英文名稱或官方中文名稱。
+- 名稱2：照抄左邊的名稱。
+- 名稱3 以後：其他確實有平台在用的寫法，沒有就不用寫。
+
+只列出真的有另一個名稱的歌手。下面這些情況不要列：
+- 只差在簡體和繁體、大小寫、重音符號或空格（工具會自己處理）。
+- 西洋歌手的中文音譯，除非唱片公司或平台正式使用。
+- 本名、綽號、團員、舊團名，或只是相似的名字。
+- 你不確定的。寧可少列也不要猜：錯的名稱會讓工具抓到別人的歌詞。
+
+可以上網查證，但輸出只要這些行，不要加標題、編號、說明、連結或資料來源。清單太長的話可以分幾次輸出，我會回「繼續」。
+
+正確的例子：
+Masayoshi Takanaka = 高中正義, Masayoshi Takanaka
+TOUMING MAGAZINE = 透明雜誌, TOUMING MAGAZINE
+椎名林檎 = Sheena Ringo, 椎名林檎, Shiina Ringo
+HYUKOH = 혁오, HYUKOH
+
+不要輸出的例子（括號裡是原因）：
+Arctic Monkeys = 北極猴子, Arctic Monkeys（只是中文音譯）
+Frank Sinatra = Francis Albert Sinatra, Frank Sinatra（本名，平台不用）
+
+以下是我的歌手：
 
 """
 
