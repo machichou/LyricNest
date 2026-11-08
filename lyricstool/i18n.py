@@ -17,6 +17,7 @@ STORED = {
     "現有歌詞": "Existing lyrics",
     "整張專輯略過": "Album skipped",
     "；純音樂：": "; instrumental: ",
+    "歌名標示": "Song title",
     "、": ", ",
 }
 
@@ -145,6 +146,7 @@ EN = {
     "部分文字被遮蔽（*）": "Some words are masked (*)",
     "歌名不完全相同": "Title is not an exact match",
     "會取代純文字歌詞": "Replaces plain lyrics",
+    "有來源或先前紀錄說是純音樂": "A source or an earlier lookup says instrumental",
     # backups
     "重新整理": "Refresh",
     "批次": "Batch",

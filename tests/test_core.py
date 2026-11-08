@@ -802,6 +802,39 @@ class Files(unittest.TestCase):
         self.assertEqual(jobs.lookup_one([other], self.track(store, "a.flac"), cfg, store, ctx), "found")
         self.assertEqual(len(store.pending_items()), 1)
 
+    def test_the_same_words_from_another_source_stay_dismissed(self):
+        store, cfg, ctx = Store(os.path.join(self.d, "s.sqlite")), self.config(), jobs.Ctx()
+        jobs.run_scan(store, cfg, ctx)
+        jobs.lookup_one([Fake(Hit("乙", LRC, matched_title="歌名", matched_length=2.0))], self.track(store, "a.flac"), cfg, store, ctx)
+        store.set_item_state(store.pending_items()[0]["id"], "dismissed")
+        retimed = "[00:01.00]作曲 : 某人\n" + LRC.replace(".50]", ".80]").replace("第 24 行", "第 二十四 行")
+        self.assertEqual(jobs.lookup_one([Fake(Hit("丙", retimed, matched_title="歌名", matched_length=2.0))], self.track(store, "a.flac"), cfg, store, ctx), "dismissed")
+        self.assertEqual(store.pending_items(), [])
+
+    def test_a_title_that_says_instrumental_is_not_looked_up(self):
+        store, cfg, ctx = Store(os.path.join(self.d, "s.sqlite")), self.config(), jobs.Ctx()
+        jobs.run_scan(store, cfg, ctx)
+        for title in ("慢靈魂 (演奏版)", "Luv(sic.) Part 4 (instrumental)", "Luv(sic) (Grand Finale instrumentals)", "Song (Inst.)", "Song - Off Vocal"):
+            source = Fake(Hit("乙", LRC, matched_title=title, matched_length=2.0))
+            track = dict(self.track(store, "a.flac"), title=title)
+            self.assertEqual(jobs.lookup_one([source], track, cfg, store, ctx), "instrumental", title)
+            self.assertFalse(hasattr(source, "q"), title)
+        for title in ("Instrumental", "回憶 (現場演奏)", "Institute"):
+            self.assertEqual(jobs.lookup_one([Fake(Hit("乙", LRC, matched_title=title, matched_length=2.0))], dict(self.track(store, "a.flac"), title=title), cfg, store, ctx), "found", title)
+
+    def test_lyrics_for_a_song_called_instrumental_are_flagged(self):
+        store, cfg, ctx = Store(os.path.join(self.d, "s.sqlite")), self.config(), jobs.Ctx()
+        jobs.run_scan(store, cfg, ctx)
+        found = Fake(Hit("乙", LRC, matched_title="歌名", matched_length=2.0))
+        store.save_lookup(self.track(store, "a.flac")["path"], "instrumental", "舊紀錄")
+        jobs.lookup_one([found], self.track(store, "a.flac"), cfg, store, ctx)
+        jobs.lookup_one([found], self.track(store, "b.mp3"), cfg, store, ctx)
+        flagged = {os.path.basename(r["path"]): ["said_instrumental"] in json.loads(r["flags"]) for r in store.pending_items()}
+        self.assertEqual(flagged, {"a.flac": True, "b.mp3": False})
+
+    def test_a_no_lyrics_notice_is_not_lyrics(self):
+        self.assertFalse(usable("[00:04.96]Metallica------Orion----\n[00:33.97]旋律-----------\n[00:38.97]抱歉   沒歌詞------", 300))
+
     def test_rescan_keeps_unticked_rows(self):
         store, cfg, ctx = Store(os.path.join(self.d, "s.sqlite")), self.config(), jobs.Ctx()
         audio.write_lyrics(os.path.join(self.lib, "a.flac"), "[00:01.00]作曲 : 某人\n" + LRC, self.backup)

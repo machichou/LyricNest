@@ -9,7 +9,7 @@ import time
 from queue import Empty, Queue
 
 from . import audio
-from .clean import clean_lrc, is_synced, last_stamp, lyric_state, squash, strip_credits, sung_lines
+from .clean import INSTRUMENTAL_TITLE, clean_lrc, is_synced, last_stamp, lyric_state, squash, strip_credits, sung_lines
 from .i18n import stored_text, tr
 from .sources import Busy, Lane, Paused, artist_parts, build_sources, make_query
 from .store import text_hash
@@ -22,10 +22,12 @@ ALBUM_SAMPLE = 3  # an album is given up on only when this many of its songs all
 # was suspended for refusing again and again, and the round ends rather than wait it out song by song.
 RETRY_PATIENCE = 180
 INSTRUMENTAL_NOTE = "；純音樂："  # in a busy song's lookup row, after the sources that still owe an answer
+TITLE_NOTE = "歌名標示"  # in the lookup row of a song its title calls instrumental, where a source's name goes otherwise
 KIND_NAMES = {"new": "新歌詞", "cleanup": "清理製作名單"}
 # Stored as [code] or [code, number] and worded when shown, so a flag reads in the language of the day.
 FLAGS = {"length_diff": "長度差 {n:.1f} 秒", "few_lines": "僅 {n} 行", "ends_early": "歌詞在歌曲中段前就結束", "masked": "部分文字被遮蔽（*）",
-         "title_differs": "歌名不完全相同", "replaces_plain": "會取代純文字歌詞"}
+         "title_differs": "歌名不完全相同", "replaces_plain": "會取代純文字歌詞",
+         "said_instrumental": "有來源或先前紀錄說是純音樂"}
 
 
 class Ctx:
@@ -190,6 +192,9 @@ def action_text(item):
 def lookup_one(sources, track, cfg, store, ctx, failed=None, lanes=None):
     """Ask every source at once; the first usable answer wins and becomes an item to review, and the others skip what is left of the song.
     `failed` maps each source that could not answer to why. `lanes` keep each source to one song at a time across calls."""
+    if INSTRUMENTAL_TITLE.search(track["title"] or ""):
+        store.save_lookup(track["path"], "instrumental", TITLE_NOTE)
+        return "instrumental"
     q = make_query(track["artist"] or track["album_artist"], track["title"], track["album"], track["length"], track["path"], cfg["aliases"])
     failed = {} if failed is None else failed
     own = lanes is None
@@ -227,7 +232,10 @@ def lookup_one(sources, track, cfg, store, ctx, failed=None, lanes=None):
             if cleaned.sung < 3:
                 continue
             source = hit.source + ("（已轉繁體）" if cleaned.converted else "")
-            result = store.put_item(track["path"], "new", source, cleaned.lrc, cleaned.removed, flags_for(track, hit, cleaned), cleaned.sung,
+            flags = flags_for(track, hit, cleaned)
+            if instrumental or (prev and prev["status"] == "instrumental"):
+                flags.append(["said_instrumental"])  # then a found song is often another song of the same name, or the sung version
+            result = store.put_item(track["path"], "new", source, cleaned.lrc, cleaned.removed, flags, cleaned.sung,
                                     f"{hit.matched_artist} - {hit.matched_title}", hit.matched_length, text_hash(track["lyrics"]))
             status = "dismissed" if result == "dismissed" else "found"
             store.save_lookup(track["path"], status, hit.source)

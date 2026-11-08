@@ -37,7 +37,9 @@ CREDIT_PLAYER = re.compile(
     r"(?:guitars?|bass|drums|piano|cello|violin|viola|keyboards?|synths?|synthesizers?|percussion|vocals?|trumpet|saxophone|flute|vibraphone|organ|harmonica)\s*$", re.I)
 RIGHTS = re.compile(r"^[【©℗️\s]*(?:版[權权]所有|未[經经]許?可?.*使用)")
 CUE = re.compile(r"^[（(\[【<]*\s*(?:前奏|間奏|间奏|尾奏|歡呼聲|欢呼声|掌聲|掌声|music|instrumental|interlude|intro|outro|solo|純音樂|纯音乐)\s*[）)\]】>]*$", re.I)
-PLACEHOLDER = ("纯音乐", "純音樂", "此歌曲为没有填词")
+PLACEHOLDER = ("纯音乐", "純音樂", "此歌曲为没有填词", "没歌词", "沒歌詞", "暂无歌词", "暫無歌詞")
+# Sources hand an instrumental the sung version's lyrics, or another song's of the same name; a title that says instrumental settles it.
+INSTRUMENTAL_TITLE = re.compile(r"[(\[（【-][^)\]）】]*(?:\binstrumentals?\b|\binst\b|\boff[ -]?vocal\b|\bkaraoke\b|演奏版|演奏曲|伴奏|純音樂|纯音乐|カラオケ)", re.I)
 
 
 def is_credit(text):
@@ -81,6 +83,12 @@ def _parse(lrc):
 
 def sung_lines(lrc):
     return [t for _, _, t in _parse(lrc) if t.strip()]
+
+
+def same_words(a, b):
+    """The same lyrics again, from another source or cleaned by other rules: the timing, script and a few lines differ, the words do not."""
+    old, new = {fold(t) for t in sung_lines(a)}, [fold(t) for t in sung_lines(b)]
+    return bool(new) and sum(t in old for t in new) >= 0.8 * len(new)
 
 
 def last_stamp(lrc):

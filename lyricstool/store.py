@@ -7,6 +7,7 @@ import threading
 import time
 
 from . import i18n
+from .clean import same_words
 
 SCHEMA = """
 create table if not exists tracks(path text primary key, ext text, size int, mtime real, artist text, album_artist text, title text, album text,
@@ -147,7 +148,7 @@ class Store:
     def put_item(self, path, kind, source, lrc, removed, flags, lines, matched, matched_length, base_hash):
         """Returns 'added', or the state of an identical suggestion already there: a rescan must not undo someone's untick or dismissal."""
         old = self.db.execute("select state,base_hash,lrc from items where path=? and kind=?", (path, kind)).fetchone()
-        if old and old["state"] in ("dismissed", "pending") and old["base_hash"] == base_hash and old["lrc"] == lrc:
+        if old and old["base_hash"] == base_hash and (old["state"] == "pending" and old["lrc"] == lrc or old["state"] == "dismissed" and same_words(old["lrc"], lrc)):
             return old["state"]
         self.db.execute("""insert or replace into items(path,kind,source,lrc,removed,flags,lines,matched,matched_length,base_hash,selected,state,at)
                            values(?,?,?,?,?,?,?,?,?,?,1,'pending',?)""",
