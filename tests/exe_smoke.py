@@ -22,7 +22,7 @@ exe = shutil.copy(exe, os.path.join(scratch, "LyricsTool.exe"))
 mine = os.path.normcase(os.path.abspath(exe))
 subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "sine=duration=1", "-metadata", "artist=陳綺貞", "-metadata", "title=太陽", os.path.join(lib, "a.flac")], check=True)
 with open(os.path.join(data, "settings.json"), "w", encoding="utf-8") as fh:
-    json.dump({"library": lib, "backup_root": os.path.join(scratch, "bak"), "lrclib_db": "", "lrcget_db": ""}, fh)
+    json.dump({"library": lib, "backup_root": os.path.join(scratch, "bak"), "lrclib_db": "", "lrcget_db": "", "language": "zh-TW"}, fh)  # the window titles looked for below are the Chinese ones
 env = dict(os.environ, LYRICSTOOL_DATA=data)
 u = ctypes.windll.user32
 k = ctypes.windll.kernel32

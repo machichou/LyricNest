@@ -1,10 +1,13 @@
 """Run with: python -m unittest discover tests. Uses ffmpeg to make real audio in a temp folder; never touches the music library."""
+import ast
 import base64
 import csv
 import hashlib
 import json
 import os
+import re
 import shutil
+import string
 import subprocess
 import sys
 import tempfile
@@ -14,10 +17,12 @@ import wave
 from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from lyricstool import audio, jobs
+from lyricstool import audio, i18n, jobs
 from lyricstool.clean import clean_lrc, is_credit, strip_credits
 from lyricstool.sources import Busy, Hit, Lane, Limiter, NetEase, Paused, OnlineLrclib, QQMusic, Retry, build_sources, Sidecar, make_query, matches, names_for, usable
 from lyricstool.store import Store, default_config, text_hash
+
+i18n.use("zh-TW")  # the texts expected below are the Chinese ones
 
 
 class Fake:
@@ -55,6 +60,48 @@ Me dices: "ciеlo, cada momento|Lessons learned:  no one's concern|提示: 月�
 la mia voce che ti dice:|Ты, зажмурившись, кричал:|А я скажу в ответ: ты не напугал|My father said: "don't be so scared"|They got one thing in common: they always come back
 這之間居然還有餘裕思考：|不會有人在意我 不會有人說：|早上醒來敲敲籠子說: "哈囉"|輕輕的喊我 (ay): "起床啦，別睡啦！"|Wake up at 6:30|學費 絕對 沒有白費：
 然後跟我說：“ 我們再一起看著生活繼續滾動吧。”|他們早在 幾年前就有過類似焦躁：|Hoping that we hold it dear:|The trees, the bushes, the animals, the flowers, the grasses... they all cried with fear: "The Rainbow Goblins""".replace("\n", "|").split("|")
+
+
+class Languages(unittest.TestCase):
+    def test_every_text_shown_has_an_english_one(self):
+        """Any Chinese left in the code is either a key of EN or a value kept in the database; an f-string with Chinese in it fails here too."""
+        cjk = re.compile("[\u3000-\u303f\u3040-\u30ff\u3400-\u9fff\uff00-\uffef]")
+        typed = {"＝"}  # what people type into the alias box, read and never shown
+        root = os.path.join(os.path.dirname(__file__), "..", "lyricstool")
+        missing = []
+        for name in os.listdir(root):
+            if not name.endswith(".py") or name in ("clean.py", "i18n.py"):  # clean.py matches words inside lyrics
+                continue
+            with open(os.path.join(root, name), encoding="utf-8") as fh:
+                tree = ast.parse(fh.read())
+            skip = set()
+            for node in ast.walk(tree):
+                regex = isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and getattr(node.func.value, "id", "") == "re"
+                docstring = isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant)
+                if regex or docstring:
+                    skip |= {id(n) for n in ast.walk(node)}
+            missing += [f"{name}:{n.lineno} {n.value!r}" for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in skip
+                        and cjk.search(n.value) and n.value not in i18n.EN and n.value not in i18n.STORED and n.value not in typed]
+        self.assertEqual(missing, [])
+
+    def test_english_fills_in_the_same_values(self):
+        names = lambda s: sorted(f for _, f, _, _ in string.Formatter().parse(s) if f is not None)
+        self.assertEqual([k for k, v in i18n.EN.items() if names(k) != names(v)], [])
+
+    def test_english(self):
+        i18n.use("en")
+        self.addCleanup(i18n.use, "zh-TW")
+        self.assertEqual(jobs.summary({"found": 2, "busy": 1}), "Found: 2, To ask again: 1")
+        self.assertEqual(i18n.stored_text("網易雲（已轉繁體）"), "NetEase (converted to Traditional)")
+        self.assertEqual(i18n.stored_text("網易雲、酷狗；純音樂：LRCLIB（線上）"), "NetEase, Kugou; instrumental: LRCLIB (online)")
+        self.assertEqual(jobs.flag_text(["length_diff", 2.8]), "Length differs by 2.8 s")
+        self.assertEqual(jobs.flag_text("長度差 2.8 秒"), "長度差 2.8 秒", "flags stored as text by older versions are shown as they are")
+        self.assertTrue(jobs.alias_prompt(["陳綺貞"], {})[0].startswith("Please"))
+
+    def test_a_language_from_an_edited_settings_file(self):
+        self.addCleanup(i18n.use, "zh-TW")
+        i18n.use("klingon")
+        self.assertIn(i18n.LANG, i18n.LANGUAGES)
 
 
 class Credits(unittest.TestCase):
@@ -386,7 +433,7 @@ class Files(unittest.TestCase):
         self.assertNotIn("作曲", item["lrc"])
         self.assertIn("後來", item["lrc"])
         self.assertEqual(sorted(json.loads(item["removed"])), sorted(["歌名 - 歌手", "作曲 : 某人"]))
-        self.assertIn("會取代純文字歌詞", json.loads(item["flags"]))
+        self.assertIn(["replaces_plain"], json.loads(item["flags"]))
         self.assertEqual(jobs.action_text(item), "取代純文字歌詞")
 
         # The file was tagged by someone else while the list waited: it must be left alone.
@@ -730,7 +777,7 @@ class Files(unittest.TestCase):
         store, cfg, ctx = Store(os.path.join(self.d, "s.sqlite")), self.config(), jobs.Ctx()
         jobs.run_scan(store, cfg, ctx)
         jobs.lookup_one([Fake(Hit("乙", LRC + "\n[00:40.00]擦**最好的技術", matched_title="歌名", matched_length=2.0))], self.track(store, "a.flac"), cfg, store, ctx)
-        self.assertIn("部分文字被遮蔽（*）", json.loads(store.pending_items()[0]["flags"]))
+        self.assertIn(["masked"], json.loads(store.pending_items()[0]["flags"]))
 
     def test_a_source_crashing_does_not_lose_the_track(self):
         class Crashes:

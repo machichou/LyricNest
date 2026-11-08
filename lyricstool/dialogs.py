@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from . import theme
+from .i18n import tr
 
 
 def _ask(title, text, buttons):
@@ -51,16 +52,16 @@ def _ask(title, text, buttons):
 
 
 def showinfo(title, text):
-    _ask(title, text, [("確定", None)])
+    _ask(title, text, [(tr("確定"), None)])
 
 
 showerror = showinfo
 
 
 def askyesno(title, text):
-    return _ask(title, text, [("否", False), ("是", True)])
+    return _ask(title, text, [(tr("否"), False), (tr("是"), True)])
 
 
 def confirm_risk(title, text, action):
     """True if the person goes ahead with `action`. The safe answer is the highlighted one, so Enter does no harm."""
-    return _ask(title, text, [(action, True), ("取消", False)])
+    return _ask(title, text, [(action, True), (tr("取消"), False)])

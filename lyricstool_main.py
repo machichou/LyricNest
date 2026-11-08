@@ -6,7 +6,8 @@ import os
 import sys
 import tkinter as tk
 
-from lyricstool import dialogs, store as store_mod, theme
+from lyricstool import dialogs, i18n, store as store_mod, theme
+from lyricstool.i18n import tr
 
 
 def setup_logging():
@@ -68,6 +69,8 @@ def main():
         selftest(sys.argv[2])
         return
     setup_logging()
+    cfg = store_mod.load_config()
+    i18n.use(cfg["language"])
     lock = single_instance()
     try:
         import ctypes
@@ -78,10 +81,10 @@ def main():
     if lock is None:
         root.withdraw()
         theme.apply(root, root.winfo_fpixels("1i") / 96)
-        dialogs.showinfo("歌詞工具", "歌詞工具已在執行中。")
+        dialogs.showinfo(tr("歌詞工具"), tr("歌詞工具已在執行中。"))
         return
     from lyricstool.app import App
-    App(root, store_mod.Store(), store_mod.load_config())
+    App(root, store_mod.Store(), cfg)
     root.mainloop()
 
 

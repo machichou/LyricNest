@@ -6,6 +6,8 @@ import sqlite3
 import threading
 import time
 
+from . import i18n
+
 SCHEMA = """
 create table if not exists tracks(path text primary key, ext text, size int, mtime real, artist text, album_artist text, title text, album text,
     length real, state text, lyrics text, error text, quality text);
@@ -36,7 +38,8 @@ def default_config():
             "backup_enabled": True,
             "skip_albums": False,
             "sources": {"sidecar": True, "lrcget": True, "lrclib": True, "netease": True, "qq": True, "kugou": True},
-            "aliases": {}}
+            "aliases": {},
+            "language": i18n.system_language()}
 
 
 def load_config():

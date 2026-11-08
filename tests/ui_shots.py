@@ -18,10 +18,11 @@ out = sys.argv[1]
 os.makedirs(out, exist_ok=True)
 d = tempfile.mkdtemp()
 os.environ["LYRICSTOOL_DATA"] = d
-from lyricstool import audio, dialogs, jobs, store as store_mod
+from lyricstool import audio, dialogs, i18n, jobs, store as store_mod
 from lyricstool.app import App, BACKUP_RISK
 from lyricstool.sources import Hit
 
+i18n.use("zh-TW")  # the texts checked below are the Chinese ones
 lib =os.path.join(d, "music")
 os.makedirs(lib)
 for i, (artist, title) in enumerate((("陳綺貞", "太陽"), ("Lisa Ono", "Undecided"), ("大象體操", "Shadow"), ("椎名林檎", "宗教"))):
@@ -37,7 +38,7 @@ store = store_mod.Store()
 jobs.run_scan(store, cfg, jobs.Ctx())
 none = store_mod.text_hash("")
 store.put_item(os.path.join(lib, "0.flac"), "new", "LRCLIB（本機）", LRC, [], [], 30, "陳綺貞 - 太陽", 1.0, none)
-store.put_item(os.path.join(lib, "1.flac"), "new", "網易雲（已轉繁體）", LRC, ["Undecided - 小野麗莎", "Piano: Don Grusin"], ["長度差 2.8 秒", "歌名不完全相同"], 30, "小野リサ - Undecided", 3.8, none)
+store.put_item(os.path.join(lib, "1.flac"), "new", "網易雲（已轉繁體）", LRC, ["Undecided - 小野麗莎", "Piano: Don Grusin"], [["length_diff", 2.8], ["title_differs"]], 30, "小野リサ - Undecided", 3.8, none)
 store.save_lookup(os.path.join(lib, "2.flac"), "notfound")
 
 ctypes.windll.shcore.SetProcessDpiAwareness(1)  # as lyricstool_main does, so the shots look like the real thing
