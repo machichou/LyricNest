@@ -19,17 +19,22 @@ MIN_LINES = 3
 # A value that opens with a quote mark is someone speaking in the song (她說：「…」), not a credit.
 NOT_QUOTE = r"(?![\s]*[「『\"“”'])"
 CREDIT_ZH = re.compile(
-    r"^(?:词|詞|曲|OP|SP|feat)\s*[:：]" + NOT_QUOTE +
+    r"^(?:词|詞|曲|OP|SP|OP/SP|feat|歌手|专辑|專輯)\s*[:：]" + NOT_QUOTE +
     r"|^[^:：「」]{0,30}(?:作词|作詞|作曲|词曲|詞曲|编曲|編曲|制作|製作|混音|母带|母帶|吉他|贝斯|貝斯|鼓手|鼓组|鼓組|键盘|鍵盤|钢琴|鋼琴|"
     r"弦乐|弦樂|絃樂|提琴|长笛|長笛|琵琶|小号|小號|萨克斯|薩克斯|合成器|和声|和聲|人声|人聲|主唱|演唱|配唱|录音|錄音|监制|監製|出品|发行|發行|"
-    r"厂牌|廠牌|版权|版權|策划|策劃|企划|企劃|统筹|統籌|封面|编程|編程|数字编辑|數位編輯|音频编辑|音頻編輯|唸白|唱片公司|手风琴|手風琴)"
+    r"厂牌|廠牌|版权|版權|策划|策劃|企划|企劃|统筹|統籌|封面|编程|編程|数字编辑|數位編輯|音频编辑|音頻編輯|唸白|唱片公司|手风琴|手風琴|"
+    r"经纪|經紀|宣传|宣傳|推广|推廣|文案|铃鼓|鈴鼓|打击乐|打擊樂|长号|長號|童声|童聲)"
     r"[^:：「」]{0,40}[:：]" + NOT_QUOTE, re.I)
-CREDIT_DRUM = re.compile(r"^鼓\s*[:：]\s*\S")
+CREDIT_DRUM = re.compile(r"^鼓\s*(?:drums?)?\s*[:：]\s*\S", re.I)
 CREDIT_EN = re.compile(
     r"^[^:：]{0,90}\b(?:lyrics?|lyricist|compose[rd]?|produce[rd]|co-producer|arranged|arranger|written by|bass|guitars?|drums?|keyboards?|vocals?|"
     r"piano|flute|trumpet|trombone|saxophone|horns?|flugelhorn|violin|viola|cello|strings|percussion|maracas?|chorus|concertmaster|engineer(?:ing)?|"
     r"tracking|recording|recorded|mixing|mixed|mastering|mastered|mix assistant|audio edited|art direction|design|photography|manufactured|"
-    r"liner notes|record company|copyright|promotion|coordinator|programmed)\b[^:：]{0,40}[:：]\s*" + NOT_QUOTE + r"\S", re.I)
+    r"liner notes|record company|copyright|promotion|coordinator|programmed|publisher|publishing|vibraphone|tambourine|special thanks)\b[^:：]{0,40}[:：]\s*" + NOT_QUOTE + r"\S", re.I)
+# The other way round, "陳綺貞: Acoustic Guitar": only when the instrument is all that follows, since a sung line goes on after it.
+CREDIT_PLAYER = re.compile(
+    r"^[^:：]{1,40}[:：]\s*(?:(?:acoustic|electric|nylon|steel|upright|double|lead|rhythm|backing|additional|grand)\s+)?"
+    r"(?:guitars?|bass|drums|piano|cello|violin|viola|keyboards?|synths?|synthesizers?|percussion|vocals?|trumpet|saxophone|flute|vibraphone|organ|harmonica)\s*$", re.I)
 RIGHTS = re.compile(r"^[【©℗️\s]*(?:版[權权]所有|未[經经]許?可?.*使用)")
 CUE = re.compile(r"^[（(\[【<]*\s*(?:前奏|間奏|间奏|尾奏|歡呼聲|欢呼声|掌聲|掌声|music|instrumental|interlude|intro|outro|solo|純音樂|纯音乐)\s*[）)\]】>]*$", re.I)
 PLACEHOLDER = ("纯音乐", "純音樂", "此歌曲为没有填词")
@@ -41,7 +46,7 @@ def is_credit(text):
         return True
     if ":" not in t and "：" not in t:  # every other pattern needs a colon, and this runs on every line of the library
         return False
-    return bool(CREDIT_ZH.match(t) or CREDIT_DRUM.match(t) or CREDIT_EN.match(t))
+    return bool(CREDIT_ZH.match(t) or CREDIT_DRUM.match(t) or CREDIT_EN.match(t) or CREDIT_PLAYER.match(t))
 
 
 def fold(s):

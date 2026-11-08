@@ -42,14 +42,19 @@ Mixing Engineering：Eric|Mastering Engineering：時俊峰|編曲 Arrangement :
 和聲＋和聲編寫 All chorus：陳綺貞 Cheer|Producer Assistant 製作助理：周谷淳 Gibson|Mix Assistant 混音助理：柯宗佑|手風琴：張瀚中|小提琴：王心為|專輯製作人：陳建騏
 母帶後期錄音室：鈺德科技|監製：方大同|Feat：黃韻玲|唸白 : Anchi|唱片公司 : 賦音乐|监制 : Khalil Fong|Piano: Febian Reza Pane|Recorded At: Soundtrack Studios
 Mixed At: Audio City|Mastered At: Onkio Haus|Photography By: Shoji Uchida|Manufactured By: Toshiba EMI Ltd|Liner Notes: Lisa Ono/Oscar Castro-Neves|Trumpet: Luis Valle
-Co-producer/Acoustic Guitar/Backing Vocals/Basic Arrangement Arranged By: Toninho Horta|Phonographic Copyright ℗: Toshiba EMI Ltd|【版權所有，未經許可請勿使用】|©️版權所有，未經許可請勿使用""".replace("\n", "|").split("|")
+Co-producer/Acoustic Guitar/Backing Vocals/Basic Arrangement Arranged By: Toninho Horta|Phonographic Copyright ℗: Toshiba EMI Ltd|【版權所有，未經許可請勿使用】|©️版權所有，未經許可請勿使用
+經紀人：杜文清|藝人經紀管理：杜文清|藝人經紀協力：侯瑩|媒體宣傳：牛佳鈺|電影音樂推廣：奔跑怪物|鈴鼓：林暐哲|打擊樂 : 鄭紫莉|長號 : 張碩（特邀樂手）|童聲 : 何沈希顏/陳嫿苮/潘翰林
+EP 文案：北海|OP/SP：瓦茲妙贊|歌手:溫室雜草|專輯:《Intro_鞋》|鼓Drums：孫仲熙 Jhong Si Sun|Publisher : Sam Duann|Vibraphone: Laura Allen|Special Thanks: 張洪泰 / JNKYRD / RM
+陳綺貞: Acoustic Guitar|李欣芸: Piano|Sato Knudsen: Cello|施佑霖: Nylon Guitar|林心怡: Bass|童志偉: Drums""".replace("\n", "|").split("|")
 # Every one of these is a sung line found in the real library.
 SUNG = """讓你不斷拍案著說：「喔幹！」|押韻不斷 讓你不斷拍案著說：「喔幹！」|但他拍手 求我：拜托再继续！|她說: "去你媽的花海"|我說: "妳這麼說好帥"|Te disse: aloha, haole na|Dizer: aloha
 Bem me avisaram: Não facilite|Each one she passes goes: Ah!|Maybe every 2:30, I go to rest|說個笑話：「世界和平。」|happy happy 谁想要sad:))|Spread love and cc: the whole society
 And the wise man say: "I don't want to hear your voice"|The message spirals: Don't get saggy, don't get grey|Los Angeles, 3:33, nothing on the stereo|Four words: forwards, can't we rewind?|她會說：「謝謝你愛我」
 Me dices: "ciеlo, cada momento|Lessons learned:  no one's concern|提示: 月光下 答案: 我和你|Thursday, 12:30|And then she asks me, Do I look all right?  然後她問我：我看起來還好嗎？|I could swear I heard someone say: "Please"
 "The important thing is: we're awake now.|Dating Courtesy: A girl is right to assume her date|That I'm loving Halo 3: ODST and these Newports that I smoke|裝在透明噴砂的玻璃罐 細看 這牌子寫著：「Soft Lipa」|對 這感覺就是:「Soft Lipa」
-la mia voce che ti dice:|Ты, зажмурившись, кричал:|А я скажу в ответ: ты не напугал|My father said: "don't be so scared"|They got one thing in common: they always come back""".replace("\n", "|").split("|")
+la mia voce che ti dice:|Ты, зажмурившись, кричал:|А я скажу в ответ: ты не напугал|My father said: "don't be so scared"|They got one thing in common: they always come back
+這之間居然還有餘裕思考：|不會有人在意我 不會有人說：|早上醒來敲敲籠子說: "哈囉"|輕輕的喊我 (ay): "起床啦，別睡啦！"|Wake up at 6:30|學費 絕對 沒有白費：
+然後跟我說：“ 我們再一起看著生活繼續滾動吧。”|他們早在 幾年前就有過類似焦躁：|Hoping that we hold it dear:|The trees, the bushes, the animals, the flowers, the grasses... they all cried with fear: "The Rainbow Goblins""".replace("\n", "|").split("|")
 
 
 class Credits(unittest.TestCase):
@@ -120,6 +125,13 @@ class Matching(unittest.TestCase):
 
     def test_alias_and_noise(self):
         self.assertTrue(matches(self.q, "小野リサ", "Tea For Two", 201))
+
+    def test_track_numbers_and_takes_are_left_out_of_the_search(self):
+        searched = {t: make_query("a", t, "", 1, "", {}).search_title for t in
+                    ["01. 後話", "02 心不在焉", "16 大禹 (feat. 9m88)", "Mary Moffett (Demo)", "Overboard (Dirty Gold cover)",
+                     "少年維持著煩惱(Acoustic版)", "airplane (20131125)", "21 Guns", "299 Addiction", "1979"]}
+        self.assertEqual(list(searched.values()), ["後話", "心不在焉", "大禹", "Mary Moffett", "Overboard", "少年維持著煩惱", "airplane",
+                                                   "21 Guns", "299 Addiction", "1979"])
 
     def test_rejects_length_artist_title(self):
         self.assertFalse(matches(self.q, "小野リサ", "Tea For Two", 204))
@@ -210,8 +222,24 @@ class Matching(unittest.TestCase):
             songs = {"songs": [{"id": 1, "name": "Tea For Two", "ar": [{"name": "小野リサ"}], "dt": 200000}]}
             self.assertEqual(src.find(self.q).lrc, LRC)
 
+    def test_netease_asks_for_a_song_found_under_both_names_once(self):
+        asked = []
+
+        def reply(url, **headers):
+            if "search" in url:
+                return {"code": 200, "result": {"songs": [{"id": 1, "name": "Tea For Two", "ar": [{"name": "小野リサ"}], "dt": 200000}]}}
+            asked.append(url)
+            return {"code": 200, "lrc": {"lyric": ""}}
+
+        src = NetEase(jobs.Ctx())
+        src.lim.delay = 0
+        self.assertGreater(len(self.q.names), 1)
+        with mock.patch("lyricstool.sources._get_json", side_effect=reply):
+            self.assertIsNone(src.find(self.q))
+        self.assertEqual(len(asked), 1)
+
     def test_alias_prompt_names_each_artist_without_an_alias_once(self):
-        text, n = jobs.alias_prompt(["Lisa Ono", "陳綺貞", "方大同 feat. 张靓颖", "Lisa Ono & 陳綺貞"], {"lisa ono": ["小野リサ"]})
+        text, n = jobs.alias_prompt(["Lisa Ono", "陳綺貞", "方大同 (feat. 张靓颖)", "Lisa Ono & 陳綺貞"], {"lisa ono": ["小野リサ"]})
         self.assertTrue(text.startswith(jobs.ALIAS_PROMPT))
         self.assertEqual((text[len(jobs.ALIAS_PROMPT):].split("\n"), n), (["张靓颖", "方大同", "陳綺貞"], 3))
 
@@ -221,6 +249,14 @@ class Matching(unittest.TestCase):
 
     def test_multi_artist_tag(self):
         self.assertIn("蛋堡 Soft Lipa", names_for("黃玠/蛋堡 Soft Lipa", {}))
+
+    def test_the_lead_is_searched_before_a_guest_with_an_alias(self):
+        aliases = {"蛋堡": ["蛋堡", "Soft Lipa"], "simon & garfunkel": ["賽門與葛芬柯"], "leo王": ["Leo王", "LEO WANG"]}
+        self.assertEqual(names_for("Leo王 (feat. 蛋堡)", {"蛋堡": aliases["蛋堡"]})[:3], ["Leo王", "蛋堡", "Soft Lipa"])
+        self.assertEqual(names_for("Leo王 (feat. 蛋堡)", aliases)[:2], ["Leo王", "LEO WANG"])
+        self.assertEqual(names_for("Simon & Garfunkel", aliases)[:3], ["賽門與葛芬柯", "Simon", "Garfunkel"])
+        self.assertEqual(names_for("黃玠/蛋堡", {})[:3], ["黃玠", "蛋堡", "黄玠"])
+        self.assertEqual(names_for("陳綺貞", {})[:2], ["陳綺貞", "陈绮贞"])
 
     def test_usable(self):
         self.assertTrue(usable(LRC, 100))
@@ -602,6 +638,17 @@ class Files(unittest.TestCase):
         with mock.patch.object(jobs, "build_sources", lambda c, x: [Answers(), other]):
             self.assertEqual(jobs.run_lookup(store, cfg, ctx), {"instrumental": 3}, "the next run settles them with the earlier answer")
         self.assertEqual(other.calls, 0, "a source that already answered is not asked again")
+
+    def test_songs_without_tags_are_named(self):
+        plain = os.path.join(self.lib, "plain.mp3")
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "sine=duration=1", "-write_id3v2", "0", "-id3v2_version", "0", plain], check=True)
+        store, cfg, ctx = Store(os.path.join(self.d, "s.sqlite")), self.config(), jobs.Ctx()
+        jobs.run_scan(store, cfg, ctx)
+        logs = []
+        ctx.emit = lambda kind, text: logs.append(text) if kind == "log" else None
+        with mock.patch.object(jobs, "build_sources", lambda c, x: [Fake(None)]):
+            jobs.run_lookup(store, cfg, ctx)
+        self.assertEqual(logs[:2], ["1 首缺少歌手或歌名標籤，已略過：", "  " + plain])
 
     def test_stopping_counts_the_songs_still_to_ask_again(self):
         class Refuses:

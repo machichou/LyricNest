@@ -10,7 +10,7 @@ from queue import Empty, Queue
 
 from . import audio
 from .clean import clean_lrc, is_synced, last_stamp, lyric_state, squash, strip_credits, sung_lines
-from .sources import SPLIT_ARTISTS, Busy, Lane, Paused, build_sources, make_query
+from .sources import Busy, Lane, Paused, artist_parts, build_sources, make_query
 from .store import text_hash
 
 log = logging.getLogger("lyricstool")
@@ -250,10 +250,13 @@ def retry_wait(queue):
 def run_lookup(store, cfg, ctx, statuses=("never", "busy"), text=""):
     """Throttled tracks are asked again at the end, up to MAX_PASSES rounds, without anyone rerunning anything."""
     every = store.lookup_targets(statuses, text)
-    targets = [t for t in every if t["title"] and (t["artist"] or t["album_artist"])]
-    skipped = len(every) - len(targets)
-    if skipped:
-        ctx.log(f"{skipped} 首缺少歌手或歌名標籤，已略過")
+    tagged = lambda t: t["title"] and (t["artist"] or t["album_artist"])
+    targets = [t for t in every if tagged(t)]
+    untagged = [t["path"] for t in every if not tagged(t)]
+    if untagged:
+        ctx.log(f"{len(untagged)} 首缺少歌手或歌名標籤，已略過：")
+        for path in untagged:
+            ctx.log(f"  {path}")
     if not targets:
         ctx.log("沒有需要查詢的歌曲")
         return {}
@@ -508,6 +511,6 @@ def alias_prompt(artists, aliases):
     """Text to paste into any AI chat, asking for aliases of every artist that has none yet; and how many artists it names.
     Tags naming several artists are split, as lookups split them, and an artist counts as covered as lookups match aliases."""
     keys = [k.lower() for k in aliases]
-    names = dict.fromkeys(p.strip() for a in artists for p in SPLIT_ARTISTS.split(a) if p.strip())
+    names = dict.fromkeys(p for a in artists for p in artist_parts(a))
     wanted = sorted((n for n in names if not any(k in n.lower() for k in keys)), key=str.casefold)
     return ALIAS_PROMPT + "\n".join(wanted), len(wanted)

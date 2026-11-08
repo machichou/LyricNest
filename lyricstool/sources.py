@@ -26,11 +26,15 @@ UA = "LyricsTool/1.0 (personal library, slow)"
 MAX_DIFF = 3
 SUSPEND_SECONDS = 600
 QUICK_RETRY = 5  # seconds; a song can afford this much while the other sources are still answering it
-NOISE = re.compile(r"\s*[\(\[][^\)\]]*(remaster|explicit|feat|bonus|deluxe|mono|stereo|version|live|cd only)[^\)\]]*[\)\]]"
-                   r"|\s+-\s+.*(remaster|explicit|mono|stereo|version|live).*$", re.I)
+NOISE = re.compile(r"\s*[\(\[][^\)\]]*(remaster|explicit|feat|bonus|deluxe|mono|stereo|version|live|cd only|acoustic|demo|cover)[^\)\]]*[\)\]]"
+                   r"|\s*[\(\[]\d{8}[\)\]]|\s+-\s+.*(remaster|explicit|mono|stereo|version|live|edit).*$", re.I)
+# "01 心不在焉", "01. 後話", "16 大禹": a track number the tagger copied from the file name. Two digits before Latin letters are
+# left alone, as they are usually the title itself ("21 Guns", "99 Problems").
+TRACK_NO = re.compile(r"^(?:0\d|\d{1,2}\.|\d{2}(?=\s+[^\x00-\x7f]))\s+")
 # A language version is sung in other words, so it must not pass for the original, which loose title matching would allow.
 # shortcut: only these languages are recognised; add one when a version in another language turns up.
 LANGUAGES = re.compile(r"japanese|korean|chinese|mandarin|cantonese|english|spanish|tagalog|thai|french|portuguese|日本语|日文|中文|国语|粤语|韩文|英文|台语")
+FEAT_IN_BRACKETS = re.compile(r"\s*[(\[（]\s*((?:feat\.?|ft\.?|featuring|with)\s+[^)\]）]+)[)\]）]", re.I)
 SPLIT_ARTISTS =re.compile(r"\s*(?:,|&|、|/|;|；| x | X | feat\.? | ft\.? | featuring | with )\s*", re.I)
 
 
@@ -72,22 +76,27 @@ class Hit:
     matched_length: float = 0.0
 
 
+def artist_parts(artist):
+    """Each artist in the tag, the lead first; "A (feat. B)" splits like "A feat. B"."""
+    flat = FEAT_IN_BRACKETS.sub(r" \1", artist or "")
+    return [p.strip() for p in SPLIT_ARTISTS.split(flat) if p.strip()]
+
+
 def names_for(artist, aliases):
-    """Every spelling worth searching for: configured aliases first, then the tag split at feat/&//, with Simplified forms."""
-    low = (artist or "").lower()
-    out = []
-    for key, names in aliases.items():
-        if key.lower() in low:
-            out += names
-    parts = [p.strip() for p in SPLIT_ARTISTS.split(artist or "") if p.strip()]
-    for p in parts + [artist or ""]:
-        out += [p, T2S.convert(p)]
+    """Every spelling worth searching for, as most sources search only the first two: each artist's aliases, then the artist
+    as tagged, lead first, so a guest's alias never pushes the lead out; an alias for the whole act goes before all of them."""
+    keys = {k.lower(): names for k, names in aliases.items()}
+    parts = artist_parts(artist)
+    out = [n for k, names in keys.items() if k in (artist or "").lower() and not any(k in p.lower() for p in parts) for n in names]
+    for p in parts:
+        out += [n for k, names in keys.items() if k in p.lower() for n in names] + [p]
+    out += [T2S.convert(p) for p in parts] + [artist or "", T2S.convert(artist or "")]  # after every artist: a Simplified twin must not take the guest's turn
     return list(dict.fromkeys(x for x in out if x))
 
 
 def titles_for(title):
-    """The title, without live/version noise, and each side of 'A / B'."""
-    base = NOISE.sub("", title).strip() or title
+    """The title, without a track number or live/version noise, and each side of 'A / B'."""
+    base = NOISE.sub("", TRACK_NO.sub("", title)).strip() or title
     return list(dict.fromkeys(x.strip() for x in [title, base, *re.split(r"\s+/\s+", base)] if x.strip()))
 
 
@@ -339,15 +348,16 @@ class NetEase:
         return self.lim.call(fetch)
 
     def find(self, q):
-        instrumental = None
+        instrumental, seen = None, set()
         for name in q.names[:2]:
             # search/get/web refused this endpoint alone for over half an hour ("操作频繁", code 405) while cloudsearch kept answering
             d = self._get("https://music.163.com/api/cloudsearch/pc?" + urllib.parse.urlencode({"s": f"{name} {q.search_title}", "type": 1, "limit": 20}))
             for s in (d.get("result") or {}).get("songs") or []:
                 who = "/".join(a["name"] for a in s.get("ar") or [])
                 dur = (s.get("dt") or 0) / 1000
-                if not matches(q, who + " " + " ".join(s.get("alia") or []), s["name"], dur):
-                    continue
+                if s["id"] in seen or not matches(q, who + " " + " ".join(s.get("alia") or []), s["name"], dur):
+                    continue  # both names often find the same song, and every request counts toward NetEase's limit
+                seen.add(s["id"])
                 ly = self._get(f"https://music.163.com/api/song/lyric?id={s['id']}&lv=1&tv=-1")
                 lrc = (ly.get("lrc") or {}).get("lyric") or ""
                 if usable(lrc, q.length):
