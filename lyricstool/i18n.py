@@ -176,7 +176,7 @@ EN = {
     "包括作曲、版權、開頭的歌名與歌手、前奏標示": "Composer, copyright, the title and artist at the top, intro cues",
     "專輯前 {n} 首都找不到時，略過整張專輯": "Skip an album when its first {n} songs are all not found",
     "純音樂也算找不到；前 {n} 首有任何一首找到，整張都會查；略過的歌記成查無歌詞":
-        "Instrumental counts as a miss; a hit in the first {n} keeps the album; skipped songs count as not found",
+        "Instrumental counts as a miss; one hit in the first {n} keeps the whole album",
     "歌手別名": "Artist aliases",
     "複製給 AI 的提示詞": "Copy prompt for an AI",
     "歌手標籤包含等號左側的文字時，也會用右側的名稱查詢。每行一位歌手。": "One artist per line. Tags containing the left side are also searched as the right.",
