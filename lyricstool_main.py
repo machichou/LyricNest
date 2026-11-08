@@ -81,10 +81,13 @@ def main():
     if lock is None:
         root.withdraw()
         theme.apply(root, root.winfo_fpixels("1i") / 96)
-        dialogs.showinfo(tr("歌詞工具"), tr("歌詞工具已在執行中。"))
+        dialogs.showinfo(tr("LyricsTool"), tr("LyricsTool is already running."))
         return
+    from lyricstool import jobs
     from lyricstool.app import App
-    App(root, store_mod.Store(), cfg)
+    store = store_mod.Store()
+    jobs.upgrade_flags(store)
+    App(root, store, cfg)
     root.mainloop()
 
 

@@ -52,16 +52,16 @@ def _ask(title, text, buttons):
 
 
 def showinfo(title, text):
-    _ask(title, text, [(tr("確定"), None)])
+    _ask(title, text, [(tr("OK"), None)])
 
 
 showerror = showinfo
 
 
 def askyesno(title, text):
-    return _ask(title, text, [(tr("否"), False), (tr("是"), True)])
+    return _ask(title, text, [(tr("No"), False), (tr("Yes"), True)])
 
 
 def confirm_risk(title, text, action):
     """True if the person goes ahead with `action`. The safe answer is the highlighted one, so Enter does no harm."""
-    return _ask(title, text, [(action, True), (tr("取消"), False)])
+    return _ask(title, text, [(action, True), (tr("Cancel"), False)])

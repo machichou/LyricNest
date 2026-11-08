@@ -25,11 +25,11 @@ class WriteError(Exception):
 
 def split_flac(data):
     if data[:4] != b"fLaC":
-        raise WriteError(tr("不是標準的 FLAC 檔案"))
+        raise WriteError(tr("Not a standard FLAC file"))
     i = 4
     while True:
         if i + 4 > len(data):
-            raise WriteError(tr("FLAC 標頭損壞"))
+            raise WriteError(tr("FLAC header is damaged"))
         h = data[i]
         i += 4 + int.from_bytes(data[i + 1:i + 4], "big")
         if h & 0x80:
@@ -91,7 +91,7 @@ def read_info(path):
         uslt = [v.text for k, v in (t.items() if t else []) if k.startswith("USLT")]
         return {"artist": _id3_text(t, "TPE1"), "album_artist": _id3_text(t, "TPE2"), "title": _id3_text(t, "TIT2"), "album": _id3_text(t, "TALB"),
                 "length": f.info.length, "quality": _quality(f.info), "lyrics": uslt[0] if uslt else ""}
-    raise WriteError(tr("不支援 {ext} 格式", ext=ext))
+    raise WriteError(tr("{ext} is not supported", ext=ext))
 
 
 def _render_flac(data, lrc):
@@ -142,7 +142,7 @@ def _patiently(action):
             return action()
         except PermissionError:
             if attempt == 3:
-                raise WriteError(tr("檔案被其他程式占用（可能正在播放或上傳）"))
+                raise WriteError(tr("The file is in use by another program (playing or uploading, perhaps)"))
             time.sleep(0.5 * (attempt + 1))
 
 
@@ -197,23 +197,23 @@ class Backup:
 def write_lyrics(path, lrc, backup):
     """Back up (unless `backup` is None), build, check, swap, check again. Raises WriteError and leaves the original in place on any failure."""
     if not lrc.strip():
-        raise WriteError(tr("歌詞內容為空"))
+        raise WriteError(tr("The lyrics are empty"))
     ext = os.path.splitext(path)[1].lower()
     if ext not in WRITABLE:
-        raise WriteError(tr("不支援 {ext} 格式", ext=ext))
+        raise WriteError(tr("{ext} is not supported", ext=ext))
     orig = _read(path)
     head, body = split(orig, ext)
     sha = hashlib.sha1(body).hexdigest()
     new = render(orig, ext, lrc)
     if hashlib.sha1(split(new, ext)[1]).hexdigest() != sha or embedded(new, ext) != lrc:
-        raise WriteError(tr("檢查未通過，未寫入檔案"))
+        raise WriteError(tr("Check failed; the file was not written"))
     name = backup.save(path, head, len(orig), sha) if backup else None
     try:
         _replace(path, new)
         back = _read(path)
         if hashlib.sha1(split(back, ext)[1]).hexdigest() != sha or embedded(back, ext) != lrc:
             _replace(path, orig)
-            raise WriteError(tr("寫入後驗證失敗，已還原"))
+            raise WriteError(tr("Check after writing failed; the original was put back"))
     except (WriteError, OSError) as e:
         if backup:
             backup.mark(name, path, len(orig), sha, f"FAIL {e}")
@@ -236,13 +236,13 @@ def restore_file(folder, row):
     """Put a saved tag block back, only if the audio is still what was backed up. Returns None or the reason it was skipped."""
     path, ext = row["path"], os.path.splitext(row["path"])[1].lower()
     if not os.path.exists(path):
-        return tr("檔案不存在")
+        return tr("File not found")
     hdr = os.path.join(folder, "headers", row["header_file"])
     if not os.path.exists(hdr):
-        return tr("備份檔不存在")
+        return tr("Backup file not found")
     body = split(_read(path), ext)[1]
     if hashlib.sha1(body).hexdigest() != row["audio_sha1"]:
-        return tr("音訊與備份時不同")
+        return tr("Audio differs from the backup")
     with open(hdr, "rb") as fh:
         head = fh.read()
     _replace(path, head + body)

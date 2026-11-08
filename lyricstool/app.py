@@ -16,20 +16,20 @@ from .store import save_config
 from .theme import BG, DANGER, FONT, LINE, MUTED, STATE_COLORS, WARN_BG
 
 log = logging.getLogger("lyricstool")
-WHY = {"never": "尚未查詢", "found": "已找到，待審閱", "notfound": "查無歌詞", "instrumental": "來源標示為純音樂或無歌詞", "dismissed": "已從清單移除",
-       "busy": "來源忙碌，待重新查詢", "unsupported": "不支援寫入此格式", "unreadable": "檔案損壞或無法讀取"}
-CARDS = {"synced": ("同步歌詞（動態顯示）", ("synced",)), "plain": ("僅有純文字歌詞", ("plain",)), "none": ("沒有歌詞", ("none",)), "other": ("不支援或已損壞", ("unsupported", "unreadable"))}
-CARD_COLUMNS = (("歌手", 100, True), ("歌名", 150, True), ("狀況", 170, False), ("專輯", 100, True), ("格式", 60, False), ("音質", 100, False))
+WHY = {"never": "Not looked up yet", "found": "Found, waiting for review", "notfound": "No lyrics found", "instrumental": "A source says instrumental or no lyrics", "dismissed": "Removed from the list",
+       "busy": "Source busy, to be asked again", "unsupported": "Format not supported for writing", "unreadable": "Damaged or unreadable file"}
+CARDS = {"synced": ("Synced lyrics", ("synced",)), "plain": ("Plain lyrics only", ("plain",)), "none": ("No lyrics", ("none",)), "other": ("Unsupported or damaged", ("unsupported", "unreadable"))}
+CARD_COLUMNS = (("Artist", 100, True), ("Title", 150, True), ("Status", 170, False), ("Album", 100, True), ("Format", 60, False), ("Quality", 100, False))
 
 
-REVIEW_HINT = "從左側選取歌曲，即可查看來源、需留意事項、將刪除的內容與完整歌詞。\n\n點選 ☑ 或按空白鍵可切換勾選。"
-BACKUP_RISK = """關閉備份後，寫入歌詞前將不會保存原本的標籤：
+REVIEW_HINT = "Select a song on the left to see its source, anything to check, what will be removed and the full lyrics.\n\nClick ☑ or press Space to tick or untick."
+BACKUP_RISK = """With backups off, the original tags are not saved before lyrics are written:
 
-• 寫入錯誤的歌詞時，無法透過「備份還原」復原，只能手動修正。
-• 被取代的純文字歌詞與刪除的製作名單將無法復原。
+• Wrong lyrics, once written, cannot be undone from Backups; they have to be fixed by hand.
+• Replaced plain lyrics and removed credits cannot be recovered.
 
-音訊不受影響，寫入前後的檢查也會照常進行。
-現有的備份不會受到影響。"""
+Audio is not affected, and the checks before and after writing still run.
+Existing backups are not affected."""
 
 
 def split_names(text):
@@ -65,7 +65,7 @@ class App:
         self.started = 0.0
         self.warned = set()
         self.review_rows = []
-        root.title(f"{tr('歌詞工具')} {__version__}")
+        root.title(f"{tr('LyricsTool')} {__version__}")
         self.scale = root.winfo_fpixels("1i") / 96
         width = min(self.px(1180), root.winfo_screenwidth() - 40)
         height = min(self.px(760), root.winfo_screenheight() - 100)
@@ -97,17 +97,17 @@ class App:
     # ---- layout ----
     def build(self):
         self.v_backup = tk.BooleanVar(value=self.cfg["backup_enabled"])  # one setting, ticked from either the review page or the settings page
-        ttk.Label(self.root, text=tr("歌詞工具"), style="Heading.TLabel").pack(anchor="w", padx=self.px(24), pady=(self.px(16), self.px(10)))
+        ttk.Label(self.root, text=tr("LyricsTool"), style="Heading.TLabel").pack(anchor="w", padx=self.px(24), pady=(self.px(16), self.px(10)))
         bar = ttk.Frame(self.root, padding=(self.px(24), self.px(10)))
         bar.pack(side="bottom", fill="x")  # before the tabs, so a small window squeezes them and not this
         tk.Frame(self.root, height=1, bg=LINE).pack(side="bottom", fill="x")
         self.nb = ttk.Notebook(self.root)
         self.nb.pack(fill="both", expand=True, padx=self.px(24), pady=(0, self.px(12)))
-        self.tab_overview = self.tab("總覽")
-        self.tab_lookup = self.tab("查詢歌詞")
-        self.tab_review = self.tab("審閱與寫入")
-        self.tab_backup = self.tab("備份還原")
-        self.tab_settings = self.tab("設定")
+        self.tab_overview = self.tab("Overview")
+        self.tab_lookup = self.tab("Look Up Lyrics")
+        self.tab_review = self.tab("Review & Write")
+        self.tab_backup = self.tab("Backups")
+        self.tab_settings = self.tab("Settings")
         self.build_overview()
         self.build_lookup()
         self.build_review()
@@ -115,13 +115,13 @@ class App:
         self.build_settings()
         self.nb.bind("<<NotebookTabChanged>>", self.on_tab)
 
-        self.status = ttk.Label(bar, text=tr("待命中"), width=60, anchor="w")
+        self.status = ttk.Label(bar, text=tr("Ready"), width=60, anchor="w")
         self.status.pack(side="left", fill="x", expand=True)
         self.eta = ttk.Label(bar, text="", style="Muted.TLabel")
         self.eta.pack(side="left", padx=10)
         self.bar = ttk.Progressbar(bar, length=260, maximum=1)
         self.bar.pack(side="left", padx=10)
-        self.btn_stop = ttk.Button(bar, text=tr("停止"), command=self.stop, state="disabled")
+        self.btn_stop = ttk.Button(bar, text=tr("Stop"), command=self.stop, state="disabled")
         self.btn_stop.pack(side="left")
 
     def tab(self, name):
@@ -158,9 +158,9 @@ class App:
         f = self.tab_overview
         top = ttk.Frame(f)
         top.pack(fill="x")
-        self.btn_scan = ttk.Button(top, text=tr("重新掃描"), command=self.scan)
+        self.btn_scan = ttk.Button(top, text=tr("Rescan"), command=self.scan)
         self.btn_scan.pack(side="right")
-        ttk.Button(top, text=tr("匯出缺少同步歌詞的歌曲"), command=self.export_missing).pack(side="right", padx=8)
+        ttk.Button(top, text=tr("Export songs without synced lyrics"), command=self.export_missing).pack(side="right", padx=8)
         self.lib_label = ttk.Label(top, style="Muted.TLabel")  # packed last, so a long path gets cut instead of the buttons
         self.lib_label.pack(side="left")
 
@@ -193,10 +193,10 @@ class App:
         lists.columnconfigure(0, weight=1, uniform="l")
         lists.columnconfigure(1, weight=1, uniform="l")
         lists.rowconfigure(1, weight=1)
-        ttk.Label(lists, text=tr("缺少同步歌詞的原因"), style="Title.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 6))
-        ttk.Label(lists, text=tr("查無歌詞最多的歌手"), style="Title.TLabel").grid(row=0, column=1, sticky="w", padx=(12, 0), pady=(0, 6))
-        self.reason_tree = self.simple_tree(lists, "原因", 0)
-        self.artist_tree = self.simple_tree(lists, "歌手", 1, padx=(12, 0))
+        ttk.Label(lists, text=tr("Why songs lack synced lyrics"), style="Title.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 6))
+        ttk.Label(lists, text=tr("Artists with the most songs not found"), style="Title.TLabel").grid(row=0, column=1, sticky="w", padx=(12, 0), pady=(0, 6))
+        self.reason_tree = self.simple_tree(lists, "Reason", 0)
+        self.artist_tree = self.simple_tree(lists, "Artist", 1, padx=(12, 0))
         self.build_card_list(f)
 
     def build_card_list(self, f):
@@ -206,11 +206,11 @@ class App:
         top.pack(fill="x", pady=(0, self.px(8)))
         self.card_title = ttk.Label(top, style="Title.TLabel")
         self.card_title.pack(side="left")
-        ttk.Button(top, text=tr("返回"), command=lambda: self.open_card(self.open_state)).pack(side="right")
+        ttk.Button(top, text=tr("Back"), command=lambda: self.open_card(self.open_state)).pack(side="right")
         self.v_card_search = tk.StringVar()
         self.v_card_search.trace_add("write", lambda *a: self.fill_card_list())
         ttk.Entry(top, textvariable=self.v_card_search, width=24).pack(side="right", padx=self.px(8))
-        ttk.Label(top, text=tr("搜尋：")).pack(side="right")
+        ttk.Label(top, text=tr("Search: ")).pack(side="right")
         pane = ttk.PanedWindow(self.card_view, orient="horizontal")
         pane.pack(fill="both", expand=True)
         left = self.card(pane)
@@ -234,31 +234,31 @@ class App:
     def simple_tree(self, parent, first_column, col, padx=0):
         wrap = self.card(parent)
         wrap.grid(row=1, column=col, sticky="nsew", padx=padx)
-        t = self.make_tree(wrap, ((first_column, 300, True), ("首數", 70, False)), "none")
+        t = self.make_tree(wrap, ((first_column, 300, True), ("Songs", 70, False)), "none")
         t.pack(fill="both", expand=True)
         return t
 
     def build_lookup(self):
         f = self.tab_lookup
-        ttk.Label(f, text=tr("查詢範圍"), style="Title.TLabel").pack(anchor="w")
+        ttk.Label(f, text=tr("What to look up"), style="Title.TLabel").pack(anchor="w")
         opts = ttk.Frame(f)
         opts.pack(fill="x", pady=(6, 4))
         self.v_never = tk.BooleanVar(value=True)
         self.v_notfound = tk.BooleanVar(value=False)
         self.v_instr = tk.BooleanVar(value=False)
-        for var, text in ((self.v_never, "尚未查詢（含先前來源忙碌的歌曲）"), (self.v_notfound, "先前查無歌詞（含已從清單移除的歌曲）"), (self.v_instr, "標示為純音樂的歌曲")):
+        for var, text in ((self.v_never, "Not looked up yet (and songs a busy source left)"), (self.v_notfound, "Not found before (and songs removed from the list)"), (self.v_instr, "Songs marked instrumental")):
             ttk.Checkbutton(opts, text=tr(text), variable=var, command=self.count_targets).pack(side="left", padx=(0, 18))
         row = ttk.Frame(f)
         row.pack(fill="x", pady=(2, 8))
-        ttk.Label(row, text=tr("僅查詢歌手、專輯、歌名或路徑包含：")).pack(side="left")
+        ttk.Label(row, text=tr("Only where artist, album, title or path contains:")).pack(side="left")
         self.v_filter = tk.StringVar()
         self.v_filter.trace_add("write", lambda *a: self.count_targets())
         ttk.Entry(row, textvariable=self.v_filter, width=30).pack(side="left", padx=6)
         self.target_label = ttk.Label(row, text="", style="Muted.TLabel")
         self.target_label.pack(side="left", padx=8)
-        self.btn_lookup = ttk.Button(row, text=tr("開始查詢"), style="Accent.TButton", command=self.lookup)
+        self.btn_lookup = ttk.Button(row, text=tr("Start lookup"), style="Accent.TButton", command=self.lookup)
         self.btn_lookup.pack(side="right")
-        ttk.Label(f, text=tr("查詢結果會先列入「審閱與寫入」，不會直接寫入檔案。中途停止或關閉程式不會遺失進度，下次會接續查詢。"), style="Muted.TLabel").pack(anchor="w", pady=(0, 8))
+        ttk.Label(f, text=tr("Results go to Review & Write first; no file is written yet. Stopping or closing loses nothing: the next lookup carries on from there."), style="Muted.TLabel").pack(anchor="w", pady=(0, 8))
         wrap = self.card(f)
         wrap.pack(fill="both", expand=True)
         self.log_box = tk.Text(wrap, wrap="word", state="disabled", padx=10, pady=8, font=(FONT, 10), **theme.TEXT)
@@ -268,13 +268,13 @@ class App:
         f = self.tab_review
         top = ttk.Frame(f)
         top.pack(fill="x", pady=(0, 8))
-        self.v_kind = tk.StringVar(value=tr("全部"))
-        kind = ttk.Combobox(top, textvariable=self.v_kind, values=(tr("全部"), *map(tr, jobs.KIND_NAMES.values())), state="readonly", width=12)
+        self.v_kind = tk.StringVar(value=tr("All"))
+        kind = ttk.Combobox(top, textvariable=self.v_kind, values=(tr("All"), *map(tr, jobs.KIND_NAMES.values())), state="readonly", width=12)
         kind.pack(side="left")
         kind.bind("<<ComboboxSelected>>", lambda e: self.fill_review())
         self.v_flagged = tk.BooleanVar(value=False)
-        ttk.Checkbutton(top, text=tr("只顯示需留意的歌曲"), variable=self.v_flagged, command=self.fill_review).pack(side="left", padx=12)
-        ttk.Label(top, text=tr("搜尋：")).pack(side="left")
+        ttk.Checkbutton(top, text=tr("Only songs to check"), variable=self.v_flagged, command=self.fill_review).pack(side="left", padx=12)
+        ttk.Label(top, text=tr("Search: ")).pack(side="left")
         self.v_search = tk.StringVar()
         self.v_search.trace_add("write", lambda *a: self.fill_review())
         ttk.Entry(top, textvariable=self.v_search, width=24).pack(side="left", padx=(0, 12))
@@ -286,7 +286,7 @@ class App:
         pane = ttk.PanedWindow(f, orient="horizontal")
         pane.pack(fill="both", expand=True)
         left = self.card(pane)
-        self.tree = self.make_tree(left, (("✓", 30, False), ("歌手", 100, True), ("歌名", 140, True), ("行為類型", 100, False), ("來源", 130, False), ("行數", 44, False), ("行為", 110, True)), "extended")
+        self.tree = self.make_tree(left, (("✓", 30, False), ("Artist", 100, True), ("Title", 140, True), ("Type", 100, False), ("Source", 130, False), ("Lines", 44, False), ("Action", 110, True)), "extended")
         self.tree.tag_configure("flag", background=WARN_BG)
         self.fill_with_scrollbar(self.tree)
         self.tree.bind("<ButtonRelease-1>", self.on_tree_click)
@@ -299,20 +299,20 @@ class App:
         self.show_text(self.preview, (tr(REVIEW_HINT), "muted"))
         pane.add(right, weight=2)
 
-        ttk.Button(bot, text=tr("全部勾選"), command=lambda: self.check_view(True)).pack(side="left")
-        ttk.Button(bot, text=tr("全部取消"), command=lambda: self.check_view(False)).pack(side="left", padx=6)
-        ttk.Button(bot, text=tr("移除選取的歌曲"), command=self.dismiss_selected).pack(side="left", padx=6)
-        ttk.Button(bot, text=tr("匯出清單"), command=self.export_review).pack(side="left", padx=6)
-        self.btn_write = ttk.Button(bot, text=tr("備份並寫入"), style="Accent.TButton", command=self.write)
+        ttk.Button(bot, text=tr("Tick all"), command=lambda: self.check_view(True)).pack(side="left")
+        ttk.Button(bot, text=tr("Untick all"), command=lambda: self.check_view(False)).pack(side="left", padx=6)
+        ttk.Button(bot, text=tr("Remove selected"), command=self.dismiss_selected).pack(side="left", padx=6)
+        ttk.Button(bot, text=tr("Export list"), command=self.export_review).pack(side="left", padx=6)
+        self.btn_write = ttk.Button(bot, text=tr("Back up and write"), style="Accent.TButton", command=self.write)
         self.btn_write.pack(side="right")
-        self.chk_backup_review = ttk.Checkbutton(bot, text=tr("寫入前先備份"), variable=self.v_backup, command=self.on_backup_switch)
+        self.chk_backup_review = ttk.Checkbutton(bot, text=tr("Back up first"), variable=self.v_backup, command=self.on_backup_switch)
         self.chk_backup_review.pack(side="right", padx=self.px(12))
 
     def build_backup(self):
         f = self.tab_backup
         top = ttk.Frame(f)
         top.pack(fill="x", pady=(0, 8))
-        ttk.Button(top, text=tr("重新整理"), command=self.fill_backups).pack(side="right")
+        ttk.Button(top, text=tr("Refresh"), command=self.fill_backups).pack(side="right")
         self.backup_label = ttk.Label(top, style="Muted.TLabel")
         self.backup_label.pack(side="left")
         bot = ttk.Frame(f)
@@ -320,32 +320,32 @@ class App:
         pane = ttk.PanedWindow(f, orient="horizontal")
         pane.pack(fill="both", expand=True)
         left = self.card(pane)
-        self.batch_tree = self.make_tree(left, (("批次", 240, True), ("時間", 140, False), ("首數", 60, False)), "browse")
+        self.batch_tree = self.make_tree(left, (("Batch", 240, True), ("Time", 140, False), ("Songs", 60, False)), "browse")
         self.fill_with_scrollbar(self.batch_tree)
         self.batch_tree.bind("<<TreeviewSelect>>", self.show_batch)
         pane.add(left, weight=2)
         right = self.card(pane)
-        self.batch_files = self.make_tree(right, (("此批次的檔案（可多選，只還原選取的項目）", 200, True),), "extended")
+        self.batch_files = self.make_tree(right, (("Files in this batch (select some to restore only those)", 200, True),), "extended")
         self.fill_with_scrollbar(self.batch_files)
         pane.add(right, weight=3)
-        ttk.Label(bot, text=tr("還原會將歌詞等標籤恢復為寫入前的狀態；音訊與備份時不同的檔案會略過。"), style="Muted.TLabel").pack(side="left")
-        self.btn_restore = ttk.Button(bot, text=tr("還原整批"), style="Accent.TButton", command=lambda: self.restore(False))
+        ttk.Label(bot, text=tr("Restoring puts lyrics and other tags back as they were before writing; files whose audio differs from the backup are skipped."), style="Muted.TLabel").pack(side="left")
+        self.btn_restore = ttk.Button(bot, text=tr("Restore batch"), style="Accent.TButton", command=lambda: self.restore(False))
         self.btn_restore.pack(side="right")
-        self.btn_restore_some = ttk.Button(bot, text=tr("還原選取項目"), command=lambda: self.restore(True))
+        self.btn_restore_some = ttk.Button(bot, text=tr("Restore selected"), command=lambda: self.restore(True))
         self.btn_restore_some.pack(side="right", padx=8)
 
     def build_settings(self):
         f = self.tab_settings
         top = ttk.Frame(f)
         top.pack(fill="x", pady=(0, self.px(14)))
-        ttk.Label(top, text=tr("歌詞工具 {version}　作者：{author}　由 Claude 協助開發", version=__version__, author=__author__), style="Muted.TLabel").pack(side="left")
-        ttk.Button(top, text=tr("儲存設定"), style="Accent.TButton", command=self.save_settings).pack(side="right")
-        ttk.Button(top, text=tr("開啟記錄檔資料夾"), command=lambda: os.startfile(os.path.dirname(self.store.path))).pack(side="right", padx=self.px(8))
+        ttk.Label(top, text=tr("LyricsTool {version}   by {author}   built with help from Claude", version=__version__, author=__author__), style="Muted.TLabel").pack(side="left")
+        ttk.Button(top, text=tr("Save settings"), style="Accent.TButton", command=self.save_settings).pack(side="right")
+        ttk.Button(top, text=tr("Open log folder"), command=lambda: os.startfile(os.path.dirname(self.store.path))).pack(side="right", padx=self.px(8))
         self.v_lang = tk.StringVar(value=i18n.LANGUAGES[i18n.LANG])  # at the top, where a small window cannot squeeze it out of view
         lang = ttk.Combobox(top, textvariable=self.v_lang, values=list(i18n.LANGUAGES.values()), state="readonly", width=10)
         lang.pack(side="right", padx=(0, self.px(16)))
         lang.bind("<<ComboboxSelected>>", self.on_language)
-        ttk.Label(top, text=tr("介面語言：")).pack(side="right", padx=(0, self.px(6)))
+        ttk.Label(top, text=tr("Language:")).pack(side="right", padx=(0, self.px(6)))
 
         cols = ttk.Frame(f)
         cols.pack(fill="both", expand=True)
@@ -359,44 +359,44 @@ class App:
 
         left.columnconfigure(0, weight=1)
         self.v_paths = {}
-        for i, (key, name, kind) in enumerate((("library", "音樂資料夾", "dir"), ("backup_root", "備份資料夾", "dir"),
-                                               ("lrclib_db", "LRCLIB 本機資料庫（選填，未設定時查詢線上資料）", "file"), ("lrcget_db", "LRCGET 資料庫（選填）", "file"))):
+        for i, (key, name, kind) in enumerate((("library", "Music folder", "dir"), ("backup_root", "Backup folder", "dir"),
+                                               ("lrclib_db", "LRCLIB local database (optional; looked up online when not set)", "file"), ("lrcget_db", "LRCGET database (optional)", "file"))):
             ttk.Label(left, text=tr(name), style="Title.TLabel").grid(row=3 * i, column=0, columnspan=2, sticky="w", pady=(self.px(14) if i else 0, self.px(5)))
             v = tk.StringVar(value=self.cfg.get(key, ""))
             self.v_paths[key] = v
             ttk.Entry(left, textvariable=v).grid(row=3 * i + 1, column=0, sticky="ew")
-            ttk.Button(left, text=tr("瀏覽"), command=lambda k=key, t=kind: self.pick(k, t)).grid(row=3 * i + 1, column=1, padx=(self.px(8), 0))
-        self.chk_backup = ttk.Checkbutton(left, text=tr("寫入前先備份原本的標籤"), variable=self.v_backup, command=self.on_backup_switch)
+            ttk.Button(left, text=tr("Browse"), command=lambda k=key, t=kind: self.pick(k, t)).grid(row=3 * i + 1, column=1, padx=(self.px(8), 0))
+        self.chk_backup = ttk.Checkbutton(left, text=tr("Back up the original tags before writing"), variable=self.v_backup, command=self.on_backup_switch)
         self.chk_backup.grid(row=5, column=0, columnspan=2, sticky="w", pady=(self.px(5), 0))
         head = ttk.Frame(left)
         head.grid(row=12, column=0, columnspan=2, sticky="w", pady=(self.px(14), self.px(5)))
-        ttk.Label(head, text=tr("略過的資料夾名稱"), style="Title.TLabel").pack(side="left")
-        ttk.Label(head, text=tr("例如：有聲書, Podcast, downloading"), style="Muted.TLabel").pack(side="left", padx=(self.px(10), 0))
+        ttk.Label(head, text=tr("Folder names to skip"), style="Title.TLabel").pack(side="left")
+        ttk.Label(head, text=tr("e.g. Audiobooks, Podcast, downloading"), style="Muted.TLabel").pack(side="left", padx=(self.px(10), 0))
         self.v_excluded = tk.StringVar(value=", ".join(self.cfg["excluded"]))
         ttk.Entry(left, textvariable=self.v_excluded).grid(row=13, column=0, columnspan=2, sticky="ew")
 
-        ttk.Label(right, text=tr("歌詞來源"), style="Title.TLabel").pack(anchor="w", pady=(0, self.px(3)))
+        ttk.Label(right, text=tr("Lyrics sources"), style="Title.TLabel").pack(anchor="w", pady=(0, self.px(3)))
         row = ttk.Frame(right)
         row.pack(anchor="w")
         self.v_sources = {}
         for i, (key, name) in enumerate((("sidecar", ".lrc 外掛檔"), ("lrcget", "LRCGET"), ("lrclib", "LRCLIB"), ("netease", "網易雲"), ("qq", "QQ 音樂"), ("kugou", "酷狗"))):
             self.v_sources[key] = tk.BooleanVar(value=self.cfg["sources"].get(key, True))
             ttk.Checkbutton(row, text=stored_text(name), variable=self.v_sources[key]).grid(row=i // 3, column=i % 3, sticky="w", padx=(0, self.px(22)))
-        ttk.Label(right, text=tr("歌詞處理"), style="Title.TLabel").pack(anchor="w", pady=(self.px(14), self.px(3)))
+        ttk.Label(right, text=tr("Lyrics processing"), style="Title.TLabel").pack(anchor="w", pady=(self.px(14), self.px(3)))
         self.v_tw = tk.BooleanVar(value=self.cfg["to_traditional"])
-        ttk.Checkbutton(right, text=tr("轉換為台灣繁體（含假名的歌詞除外）"), variable=self.v_tw).pack(anchor="w")
+        ttk.Checkbutton(right, text=tr("Convert Chinese to Traditional (Taiwan), except lyrics with kana"), variable=self.v_tw).pack(anchor="w")
         self.v_credits = tk.BooleanVar(value=self.cfg["remove_credits"])
-        ttk.Checkbutton(right, text=tr("移除製作名單等非歌詞內容"), variable=self.v_credits).pack(anchor="w")
-        ttk.Label(right, text=tr("包括作曲、版權、開頭的歌名與歌手、前奏標示"), style="Muted.TLabel").pack(anchor="w", padx=(self.px(24), 0))
+        ttk.Checkbutton(right, text=tr("Remove credits and other lines that are not lyrics"), variable=self.v_credits).pack(anchor="w")
+        ttk.Label(right, text=tr("Composer, copyright, the title and artist at the top, intro cues"), style="Muted.TLabel").pack(anchor="w", padx=(self.px(24), 0))
         self.v_skip_albums = tk.BooleanVar(value=self.cfg["skip_albums"])
-        ttk.Checkbutton(right, text=tr("專輯前 {n} 首都找不到時，略過整張專輯", n=jobs.ALBUM_SAMPLE), variable=self.v_skip_albums).pack(anchor="w")
-        ttk.Label(right, text=tr("純音樂也算找不到；前 {n} 首有任何一首找到，整張都會查；略過的歌記成查無歌詞", n=jobs.ALBUM_SAMPLE), style="Muted.TLabel").pack(anchor="w", padx=(self.px(24), 0))
+        ttk.Checkbutton(right, text=tr("Skip an album when its first {n} songs are all not found", n=jobs.ALBUM_SAMPLE), variable=self.v_skip_albums).pack(anchor="w")
+        ttk.Label(right, text=tr("Instrumental counts as a miss; one hit in the first {n} keeps the whole album", n=jobs.ALBUM_SAMPLE), style="Muted.TLabel").pack(anchor="w", padx=(self.px(24), 0))
 
         row = ttk.Frame(right)
         row.pack(fill="x", pady=(self.px(14), self.px(5)))
-        ttk.Label(row, text=tr("歌手別名"), style="Title.TLabel").pack(side="left")
-        ttk.Button(row, text=tr("複製給 AI 的提示詞"), command=self.copy_alias_prompt).pack(side="right")
-        for line in ("歌手標籤包含等號左側的文字時，也會用右側的名稱查詢。每行一位歌手。", "例如：lisa ono = 小野リサ, Lisa Ono, 小野丽莎, 小野麗莎, Ono Lisa", "　　　Ichiko Aoba = 青葉市子, 青叶市子, あおばいちこ"):
+        ttk.Label(row, text=tr("Artist aliases"), style="Title.TLabel").pack(side="left")
+        ttk.Button(row, text=tr("Copy prompt for an AI"), command=self.copy_alias_prompt).pack(side="right")
+        for line in ("One artist per line. Tags containing the left side are also searched as the right.", "e.g. lisa ono = 小野リサ, Lisa Ono, 小野丽莎, 小野麗莎, Ono Lisa", "       Ichiko Aoba = 青葉市子, 青叶市子, あおばいちこ"):
             ttk.Label(right, text=tr(line), style="Muted.TLabel").pack(anchor="w", pady=(0, self.px(6)))  # separate labels: a single multi-line one has no line spacing to set
         wrap = self.card(right)
         wrap.pack(fill="both", expand=True)
@@ -407,7 +407,7 @@ class App:
     # ---- background jobs ----
     def start(self, name, fn, done=None):
         if self.thread and self.thread.is_alive():
-            dialogs.showinfo(tr("歌詞工具"), tr("目前有工作正在進行，請等待完成或先按「停止」。"))
+            dialogs.showinfo(tr("LyricsTool"), tr("A job is running. Wait for it to finish, or click Stop first."))
             return False
         ctx = jobs.Ctx(lambda kind, payload: self.events.put((kind, payload)))
         self.ctx, self.started, self.warned = ctx, time.monotonic(), set()
@@ -420,14 +420,14 @@ class App:
                 self.events.put(("failed", str(e)))
             except Exception as e:  # shown to the user and logged; the app keeps running
                 log.exception("job %s failed", name)
-                self.events.put(("failed", tr("{name}時發生錯誤：{e}\n詳細資訊請見記錄檔。", name=name, e=e)))
+                self.events.put(("failed", tr("{name} failed: {e}\nSee the log file for details.", name=name, e=e)))
 
         self.thread = threading.Thread(target=work, daemon=True)
         self.thread.start()
         return True
 
     def set_running(self, running, text=None):
-        self.status.configure(text=text or tr("待命中"))
+        self.status.configure(text=text or tr("Ready"))
         self.btn_stop.configure(state="normal" if running else "disabled")
         state = "disabled" if running else "normal"
         for b in (self.btn_scan, self.btn_lookup, self.btn_restore, self.btn_restore_some):
@@ -460,7 +460,7 @@ class App:
                     self.write_log(payload)
                     self.refresh_all()
                     if not self.closing:
-                        dialogs.showerror(tr("歌詞工具"), payload)
+                        dialogs.showerror(tr("LyricsTool"), payload)
                     self.finish_close()
                 if self.closed:
                     return
@@ -475,27 +475,26 @@ class App:
         self.status.configure(text=f"{done}/{total}  {text}"[:90])
         if 5 <= done < total:
             left = (time.monotonic() - self.started) / done * (total - done)
-            self.eta.configure(text=tr("剩餘 {n:.1f} 小時", n=left / 3600) if left >= 3600 else tr("剩餘 {n:.0f} 分鐘", n=max(left / 60, 1)))
+            self.eta.configure(text=tr("{n:.1f} h left", n=left / 3600) if left >= 3600 else tr("{n:.0f} min left", n=max(left / 60, 1)))
 
     def warn_limited(self, label):
         """Once per job and source: carrying on while the main sources refuse mostly piles up songs to ask again."""
         if label in self.warned or self.closing:
             return
         self.warned.add(label)
-        text = tr("{label} 一直拒絕查詢，可能是短時間內查太多次，已暫停使用 10 分鐘。\n\n"
-                  "其他來源會繼續查，這段期間的歌會留到最後再補問。建議先停止，過一段時間（例如一小時）再查。\n\n要現在停止查詢嗎？", label=stored_text(label))
-        if dialogs.askyesno(tr("來源被限流"), text) and self.thread and self.thread.is_alive():
+        text = tr("{label} keeps refusing lookups, probably after too many in a short time, and is paused for 10 minutes.\n\nThe other sources carry on, and songs from this time are asked again at the end. It is best to stop now and look up again later (in an hour, say).\n\nStop the lookup now?", label=stored_text(label))
+        if dialogs.askyesno(tr("Source is limiting lookups"), text) and self.thread and self.thread.is_alive():
             self.stop()
 
     def stop(self):
         if self.ctx:
             self.ctx.cancel()
-            self.status.configure(text=tr("正在停止（完成目前這首後結束）…"))
+            self.status.configure(text=tr("Stopping (after the current song)…"))
             self.btn_stop.configure(state="disabled")
 
     def on_close(self):
         if self.thread and self.thread.is_alive():
-            if not dialogs.askyesno(tr("歌詞工具"), tr("目前有工作正在進行，要停止並關閉程式嗎？\n已完成的部分會保留。")):
+            if not dialogs.askyesno(tr("LyricsTool"), tr("A job is running. Stop it and close?\nWhat is done so far is kept.")):
                 return
             self.closing = True
             self.stop()
@@ -510,7 +509,7 @@ class App:
 
     def on_ui_error(self, exc, val, tb):
         log.error("UI error", exc_info=(exc, val, tb))
-        dialogs.showerror(tr("歌詞工具"), tr("發生錯誤：{e}\n詳細資訊請見記錄檔。", e=val))
+        dialogs.showerror(tr("LyricsTool"), tr("Something went wrong: {e}\nSee the log file for details.", e=val))
 
     def write_log(self, text):
         self.log_box.configure(state="normal")
@@ -520,7 +519,7 @@ class App:
 
     # ---- actions ----
     def scan(self):
-        self.start(tr("掃描音樂資料夾"), lambda ctx: jobs.run_scan(self.store, self.cfg, ctx))
+        self.start(tr("Scan music folder"), lambda ctx: jobs.run_scan(self.store, self.cfg, ctx))
 
     def statuses(self):
         out = []
@@ -535,15 +534,15 @@ class App:
     def count_targets(self):
         st = self.statuses()
         n = len(self.store.lookup_targets(st, self.v_filter.get().strip())) if st else 0
-        self.target_label.configure(text=tr("符合 {n} 首", n=n))
+        self.target_label.configure(text=tr("Matches: {n}", n=n))
 
     def lookup(self):
         st = self.statuses()
         if not st:
-            dialogs.showinfo(tr("歌詞工具"), tr("請至少勾選一種查詢範圍。"))
+            dialogs.showinfo(tr("LyricsTool"), tr("Tick at least one kind of song to look up."))
             return
         text = self.v_filter.get().strip()
-        self.start(tr("查詢歌詞"), lambda ctx: jobs.run_lookup(self.store, self.cfg, ctx, st, text), self.after_lookup)
+        self.start(tr("Look Up Lyrics"), lambda ctx: jobs.run_lookup(self.store, self.cfg, ctx, st, text), self.after_lookup)
 
     def after_lookup(self, counts):
         if counts.get("found"):
@@ -552,53 +551,52 @@ class App:
     def write(self):
         items = self.store.selected_items()
         if not items:
-            dialogs.showinfo(tr("歌詞工具"), tr("尚未勾選要寫入的歌曲。"))
+            dialogs.showinfo(tr("LyricsTool"), tr("No songs are ticked for writing."))
             return
         flagged = sum(1 for i in items if json.loads(i["flags"]))
         on = self.cfg["backup_enabled"]
-        msg = tr("確定要寫入 {n} 首歌曲嗎？\n\n", n=len(items)) + (tr("原本的標籤會先備份至：\n{folder}", folder=os.path.abspath(self.cfg['backup_root'])) if on else tr("備份已關閉，寫入後無法還原。"))
+        msg = tr("Write lyrics to the ticked songs ({n})?\n\n", n=len(items)) + (tr("The original tags will be backed up to:\n{folder}", folder=os.path.abspath(self.cfg['backup_root'])) if on else tr("Backups are off; this cannot be undone."))
         if flagged:
-            msg += tr("\n\n其中 {n} 首需要留意。", n=flagged)
-        if dialogs.askyesno(tr("備份並寫入" if on else "寫入"), msg):
-            self.start(tr("寫入歌詞"), lambda ctx: jobs.run_write(self.store, self.cfg, ctx), self.after_write)
+            msg += tr("\n\nSongs to check among them: {n}.", n=flagged)
+        if dialogs.askyesno(tr("Back up and write" if on else "Write"), msg):
+            self.start(tr("Write lyrics"), lambda ctx: jobs.run_write(self.store, self.cfg, ctx), self.after_write)
 
     def after_write(self, r):
-        text = tr("已成功寫入 {n} 首，歌詞與音訊皆通過驗證。", n=r['ok'])
+        text = tr("Written: {n}. Lyrics and audio all passed verification.", n=r['ok'])
         if r["failed"] or r["stale"]:
-            text += tr("\n{failed} 首寫入失敗，{stale} 首因檔案已變動而略過，這些檔案都沒有被更動。詳細資訊請見「查詢歌詞」分頁的紀錄。", failed=len(r['failed']), stale=len(r['stale']))
-        dialogs.showinfo(tr("寫入完成"), text)
+            text += tr("\nFailed: {failed}. Skipped because the file changed: {stale}. None of these files were touched. Details are in the log on the Look Up Lyrics tab.", failed=len(r['failed']), stale=len(r['stale']))
+        dialogs.showinfo(tr("Write complete"), text)
         self.fill_backups()
 
     def restore(self, only_selected):
         sel = self.batch_tree.selection()
         if not sel:
-            dialogs.showinfo(tr("歌詞工具"), tr("請先選取一個備份批次。"))
+            dialogs.showinfo(tr("LyricsTool"), tr("Select a backup batch first."))
             return
         folder = sel[0]
         paths = None
         if only_selected:
             paths = set(self.batch_files.selection())
             if not paths:
-                dialogs.showinfo(tr("歌詞工具"), tr("請先在右側選取要還原的檔案。"))
+                dialogs.showinfo(tr("LyricsTool"), tr("Select the files to restore on the right first."))
                 return
         n = len(paths) if paths else len(self.batch_files.get_children())
-        if dialogs.askyesno(tr("還原"), tr("確定要將 {n} 首歌曲還原為此批次寫入前的狀態嗎？", n=n)):
-            self.start(tr("還原"), lambda ctx: jobs.run_restore(self.store, self.cfg, ctx, folder, paths),
-                       lambda r: dialogs.showinfo(tr("還原完成"), tr("已還原 {done} 首，略過 {skipped} 首。", done=r['done'], skipped=len(r['skipped']))))
+        if dialogs.askyesno(tr("Restore"), tr("Restore these songs ({n}) to how they were before this batch was written?", n=n)):
+            self.start(tr("Restore"), lambda ctx: jobs.run_restore(self.store, self.cfg, ctx, folder, paths),
+                       lambda r: dialogs.showinfo(tr("Restore complete"), tr("Restored: {done}. Skipped: {skipped}.", done=r['done'], skipped=len(r['skipped']))))
 
     def copy_alias_prompt(self):
         text, n = jobs.alias_prompt(self.store.artists(), parse_aliases(self.alias_box.get("1.0", "end")))
         if not n:
-            dialogs.showinfo(tr("歌詞工具"), tr("曲庫裡的歌手都已經有別名了。"))
+            dialogs.showinfo(tr("LyricsTool"), tr("Every artist in the library already has aliases."))
             return
         self.root.clipboard_clear()
         self.root.clipboard_append(text)
-        dialogs.showinfo(tr("歌詞工具"), tr("已複製提示詞，列出 {n} 位還沒有別名的歌手。\n\n"
-                                          "貼給你常用的 AI（例如 ChatGPT、Claude），把它回覆的每一行貼到下方的歌手別名，再按「儲存設定」。", n=n))
+        dialogs.showinfo(tr("LyricsTool"), tr("Prompt copied. It lists the artists without aliases ({n}).\n\nPaste it into the AI you use (ChatGPT or Claude, say), paste each line of its reply into Artist aliases below, then click Save settings.", n=n))
 
     def save_settings(self):
         if self.thread and self.thread.is_alive():
-            dialogs.showinfo(tr("歌詞工具"), tr("目前有工作正在進行，請等待完成或先按「停止」，再儲存設定。"))
+            dialogs.showinfo(tr("LyricsTool"), tr("A job is running. Wait for it to finish, or click Stop, before saving settings."))
             return
         aliases = parse_aliases(self.alias_box.get("1.0", "end"))
         new = dict(self.cfg)
@@ -610,10 +608,10 @@ class App:
         new["skip_albums"] = self.v_skip_albums.get()
         new["aliases"] = aliases
         if not os.path.isdir(new["library"]):
-            dialogs.showerror(tr("歌詞工具"), tr("找不到音樂資料夾。"))
+            dialogs.showerror(tr("LyricsTool"), tr("Music folder not found."))
             return
         if new["backup_enabled"] and not new["backup_root"]:
-            dialogs.showerror(tr("歌詞工具"), tr("請設定備份資料夾。"))
+            dialogs.showerror(tr("LyricsTool"), tr("Set a backup folder."))
             return
         changed = new["library"] != self.cfg["library"] or new["excluded"] != self.cfg["excluded"]
         rescan = changed or new["remove_credits"] != self.cfg["remove_credits"]  # a scan also adds or withdraws the cleanup suggestions
@@ -627,11 +625,11 @@ class App:
         if rescan:
             self.scan()
         else:
-            dialogs.showinfo(tr("歌詞工具"), tr("設定已儲存。"))
+            dialogs.showinfo(tr("LyricsTool"), tr("Settings saved."))
 
     def on_backup_switch(self):
         """Takes effect at once, unlike the rest of the settings page: beside the write button, a tick has to mean what it shows."""
-        if not self.v_backup.get() and not dialogs.confirm_risk(tr("關閉備份"), tr(BACKUP_RISK), tr("關閉備份")):
+        if not self.v_backup.get() and not dialogs.confirm_risk(tr("Turn off backups"), tr(BACKUP_RISK), tr("Turn off backups")):
             self.v_backup.set(True)
             return
         self.cfg["backup_enabled"] = self.v_backup.get()
@@ -644,7 +642,7 @@ class App:
         if lang != self.cfg["language"]:
             self.cfg["language"] = lang
             save_config(self.cfg)
-            dialogs.showinfo(tr("歌詞工具"), tr("重新開啟程式後就會套用新的語言。"))
+            dialogs.showinfo(tr("LyricsTool"), tr("The new language is used from the next time LyricsTool starts."))
 
     def pick(self, key, kind):
         p = filedialog.askdirectory() if kind == "dir" else filedialog.askopenfilename()
@@ -652,12 +650,12 @@ class App:
             self.v_paths[key].set(os.path.normpath(p))
 
     def export_missing(self):
-        p = filedialog.asksaveasfilename(defaultextension=".csv", initialfile=tr("缺少同步歌詞的歌曲.csv"), filetypes=[("CSV", "*.csv")])
+        p = filedialog.asksaveasfilename(defaultextension=".csv", initialfile=tr("songs without synced lyrics.csv"), filetypes=[("CSV", "*.csv")])
         if p:
             jobs.export_missing(self.store.missing_rows(), p)
 
     def export_review(self):
-        p = filedialog.asksaveasfilename(defaultextension=".csv", initialfile=tr("審閱清單.csv"), filetypes=[("CSV", "*.csv")])
+        p = filedialog.asksaveasfilename(defaultextension=".csv", initialfile=tr("review list.csv"), filetypes=[("CSV", "*.csv")])
         if p:
             jobs.export_review(self.store.pending_items(), p)
 
@@ -693,9 +691,9 @@ class App:
     def update_write_button(self, running=None):
         running = self.thread is not None and self.thread.is_alive() if running is None else running
         n = sum(1 for r in self.review_rows if r["selected"])
-        self.btn_write.configure(text=tr("備份並寫入 {n} 首" if self.cfg['backup_enabled'] else "寫入 {n} 首", n=n), state="normal" if n and not running else "disabled")
-        self.review_count.configure(text=tr("共 {total} 首，已勾選 {n} 首", total=len(self.review_rows), n=n))
-        self.nb.tab(self.tab_review, text=tr("審閱與寫入（{n}）", n=len(self.review_rows)) if self.review_rows else tr("審閱與寫入"))
+        self.btn_write.configure(text=tr("Back up and write ({n})" if self.cfg['backup_enabled'] else "Write ({n})", n=n), state="normal" if n and not running else "disabled")
+        self.review_count.configure(text=tr("{total} in list, {n} ticked", total=len(self.review_rows), n=n))
+        self.nb.tab(self.tab_review, text=tr("Review & Write ({n})", n=len(self.review_rows)) if self.review_rows else tr("Review & Write"))
 
     def on_tree_click(self, e):
         if self.tree.identify_region(e.x, e.y) == "cell" and self.tree.identify_column(e.x) == "#1":
@@ -739,18 +737,18 @@ class App:
             return
         parts = [(f"{r['artist']} - {r['title']}\n", "head"), (f"{r['album']}\n", "muted")]
         if r["kind"] == "new":
-            parts.append((tr("來源：{source}\n比對結果：{matched}（{found:.1f} 秒，檔案為 {length:.1f} 秒）\n", source=stored_text(r['source']), matched=r['matched'],
+            parts.append((tr("Source: {source}\nMatched: {matched} ({found:.1f} s; the file is {length:.1f} s)\n", source=stored_text(r['source']), matched=r['matched'],
                              found=r['matched_length'], length=r['length']), "muted"))
-        parts += [(tr("需留意：{flag}\n", flag=jobs.flag_text(flag)), "") for flag in json.loads(r["flags"])]
+        parts += [(tr("Check: {flag}\n", flag=jobs.flag_text(flag)), "") for flag in json.loads(r["flags"])]
         removed = json.loads(r["removed"])
         if removed:
-            parts += [(tr("\n將刪除的內容：\n"), "muted")] + [(line + "\n", "gone") for line in removed]
-        parts += [(tr("\n寫入後的歌詞：\n"), "muted"), (r["lrc"], "")]
+            parts += [(tr("\nTo be removed:\n"), "muted")] + [(line + "\n", "gone") for line in removed]
+        parts += [(tr("\nLyrics after writing:\n"), "muted"), (r["lrc"], "")]
         self.show_text(self.preview, *parts)
 
     # ---- backups ----
     def fill_backups(self):
-        self.backup_label.configure(text=tr("備份資料夾：{folder}", folder=self.cfg['backup_root']) + ("" if self.cfg["backup_enabled"] else tr("　備份已關閉，之後寫入的歌曲不會列在此處")))
+        self.backup_label.configure(text=tr("Backup folder: {folder}", folder=self.cfg['backup_root']) + ("" if self.cfg["backup_enabled"] else tr("   Backups are off; songs written from now on will not be listed here")))
         keep = self.batch_tree.selection()  # a refresh after restoring must not lose the batch being worked on
         self.batch_tree.delete(*self.batch_tree.get_children())
         self.batch_files.delete(*self.batch_files.get_children())
@@ -778,7 +776,7 @@ class App:
         (self.lists if self.open_state else self.card_view).pack_forget()
         (self.card_view if self.open_state else self.lists).pack(fill="both", expand=True)
         # Having lyrics, what an old lookup once said no longer matters. Widths start over, or columns stretched to fill without 狀況 push it out of view when it returns.
-        self.card_tree.configure(displaycolumns=[c[0] for c in CARD_COLUMNS if key != "synced" or c[0] != "狀況"])
+        self.card_tree.configure(displaycolumns=[c[0] for c in CARD_COLUMNS if key != "synced" or c[0] != "Status"])
         for name, width, _ in CARD_COLUMNS:
             self.card_tree.column(name, width=self.px(width))
         self.v_card_search.set("")  # its trace fills the list
@@ -796,7 +794,7 @@ class App:
             if needle in f"{artist} {title} {r['album']} {r['path']}".lower():
                 self.card_rows[r["path"]] = r
                 self.card_tree.insert("", "end", iid=r["path"], values=(artist, title, tr(WHY[r["why"]]), r["album"], r["ext"].lstrip(".").upper(), r["quality"] or ""))
-        self.card_title.configure(text=tr("{name}　{n:,} 首", name=tr(CARDS[key][0]), n=len(self.card_rows)))
+        self.card_title.configure(text=tr("{name}   {n:,}", name=tr(CARDS[key][0]), n=len(self.card_rows)))
         if keep and self.card_tree.exists(keep[0]):
             self.card_tree.selection_set(keep[0])
         else:
@@ -807,26 +805,26 @@ class App:
         r = self.card_rows.get(sel[0]) if sel else None
         t = self.store.track(r["path"]) if r else None
         if t is None:
-            self.show_text(self.card_detail, (tr("從左側選取歌曲，即可查看詳細資料與歌詞。"), "muted"))
+            self.show_text(self.card_detail, (tr("Select a song on the left to see its details and lyrics."), "muted"))
             return
         artist, title = track_names(r)
         facts = [x for x in (r["ext"].lstrip(".").upper(), r["quality"], f"{r['size'] / 1e6:.1f} MB") if x]
         if r["length"]:
             facts.insert(0, f"{int(r['length']) // 60}:{int(r['length']) % 60:02d}")
-        parts = [(f"{artist} - {title}\n" if artist else f"{title}\n", "head"), (f"{r['album']}\n" if r["album"] else "", "muted"), (tr("　").join(facts) + f"\n{r['path']}\n", "muted")]
+        parts = [(f"{artist} - {title}\n" if artist else f"{title}\n", "head"), (f"{r['album']}\n" if r["album"] else "", "muted"), (tr("   ").join(facts) + f"\n{r['path']}\n", "muted")]
         if r["state"] != "synced":
             when = time.strftime("%Y-%m-%d %H:%M", time.localtime(r["at"])) if r["at"] else ""
-            extra = tr("，").join(x for x in (stored_text(r["source"] or ""), when) if x)
-            parts.append((tr("\n狀況：{why}", why=tr(WHY[r['why']])) + (tr("（{extra}）", extra=extra) if extra else "") + "\n", ""))
+            extra = tr(" · ").join(x for x in (stored_text(r["source"] or ""), when) if x)
+            parts.append((tr("\nStatus: {why}", why=tr(WHY[r['why']])) + (tr(" ({extra})", extra=extra) if extra else "") + "\n", ""))
         if r["error"]:
-            parts.append((tr("錯誤：{error}\n", error=r['error']), ""))
+            parts.append((tr("Error: {error}\n", error=r['error']), ""))
         if r["state"] not in ("unsupported", "unreadable"):
-            parts += [(tr("\n內嵌歌詞：\n"), "muted"), (t["lyrics"] or tr("（無）"), "")]
+            parts += [(tr("\nEmbedded lyrics:\n"), "muted"), (t["lyrics"] or tr("(none)"), "")]
         self.show_text(self.card_detail, *parts)
 
     # ---- overview ----
     def refresh_all(self):
-        self.lib_label.configure(text=tr("音樂資料夾：{folder}", folder=self.cfg.get('library') or tr('尚未設定，請至「設定」分頁選擇')))
+        self.lib_label.configure(text=tr("Music folder: {folder}", folder=self.cfg.get('library') or tr("not set; choose one on the Settings tab")))
         c = self.store.counts()
         vals = {"synced": c.get("synced", 0), "plain": c.get("plain", 0), "none": c.get("none", 0), "other": c.get("unsupported", 0) + c.get("unreadable", 0)}
         total = sum(vals.values())

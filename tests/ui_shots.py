@@ -165,7 +165,7 @@ with mock.patch("lyricstool.app.dialogs") as box, mock.patch("lyricstool.app.fil
 
     # Finding things in the list.
     check("all rows", rows(), 3)
-    check("action column says what writing will do", {app.tree.set(i, "歌名"): app.tree.set(i, "行為") for i in app.tree.get_children()},
+    check("action column says what writing will do", {app.tree.set(i, "Title"): app.tree.set(i, "Action") for i in app.tree.get_children()},
           {"太陽": "寫入新歌詞", "Undecided": "寫入新歌詞；長度差 2.8 秒；歌名不完全相同", "宗教": "刪除 2 行製作名單"})
     app.v_kind.set("清理製作名單")
     app.fill_review()
@@ -200,13 +200,13 @@ with mock.patch("lyricstool.app.dialogs") as box, mock.patch("lyricstool.app.fil
     check("missing list exported", os.path.exists(missing), True)
 
     # Removing from the list is remembered across a new lookup.
-    target = next(i for i in app.tree.get_children() if app.tree.set(i, "歌名") == "太陽")
+    target = next(i for i in app.tree.get_children() if app.tree.set(i, "Title") == "太陽")
     app.tree.selection_set(target)
     root.update()
     app.dismiss_selected()
     check("removed from list", rows(), 2)
     check("its details go with it", "從左側選取歌曲" in app.preview.get("1.0", "end"), True)
-    check("reason shown", any(app.reason_tree.set(i, "原因") == "已從清單移除" for i in app.reason_tree.get_children()), True)
+    check("reason shown", any(app.reason_tree.set(i, "Reason") == "已從清單移除" for i in app.reason_tree.get_children()), True)
 
     # Looking up, with a source that answers.
     app.v_notfound.set(True)
@@ -267,13 +267,13 @@ with mock.patch("lyricstool.app.dialogs") as box, mock.patch("lyricstool.app.fil
     check("card opens its list", (app.card_view.winfo_ismapped(), app.lists.winfo_ismapped(), len(app.card_tree.get_children())), (1, 0, 3))
     check("says what and how many", app.card_title.cget("text"), "沒有歌詞　3 首")
     check("hint before anything is picked", "從左側選取歌曲" in detail(), True)
-    picked = next(i for i in app.card_tree.get_children() if app.card_tree.set(i, "歌名") == "Shadow")
+    picked = next(i for i in app.card_tree.get_children() if app.card_tree.set(i, "Title") == "Shadow")
     app.card_tree.selection_set(picked)
     root.update()
     shot("9_card_list")
     check("details of a song without lyrics", all(x in detail() for x in ("大象體操 - Shadow", picked, "FLAC", "16/44.1kHz", "0:01", "（無）")), True)
-    check("audio quality in the list", app.card_tree.set(picked, "音質"), "16/44.1kHz")
-    check("why it has none", app.card_tree.set(picked, "狀況") in detail(), True)
+    check("audio quality in the list", app.card_tree.set(picked, "Quality"), "16/44.1kHz")
+    check("why it has none", app.card_tree.set(picked, "Status") in detail(), True)
     app.v_card_search.set("SHADOW")
     check("search in the list", (len(app.card_tree.get_children()), app.card_title.cget("text")), (1, "沒有歌詞　1 首"))
     check("details stay while the song is listed", "大象體操 - Shadow" in detail(), True)
@@ -282,7 +282,7 @@ with mock.patch("lyricstool.app.dialogs") as box, mock.patch("lyricstool.app.fil
     click_card("synced")
     check("another card takes over, search cleared", (app.open_state, len(app.card_tree.get_children()), app.v_card_search.get()), ("synced", 1, ""))
     check("marked as the open one", (app.card_frames["synced"].instate(["selected"]), app.card_frames["none"].instate(["selected"])), (True, False))
-    check("no lookup column once it has lyrics", "狀況" in app.card_tree.cget("displaycolumns"), False)
+    check("no lookup column once it has lyrics", "Status" in app.card_tree.cget("displaycolumns"), False)
     app.card_tree.selection_set(app.card_tree.get_children()[0])
     root.update()
     check("details show the embedded lyrics", all(x in detail() for x in ("椎名林檎 - 宗教", "第 10 行歌詞", "內嵌歌詞")), True)
@@ -292,10 +292,10 @@ with mock.patch("lyricstool.app.dialogs") as box, mock.patch("lyricstool.app.fil
     click_card("other")
     app.scan()
     pump()
-    check("files without tags are listed by file name", sorted(app.card_tree.set(i, "歌名") for i in app.card_tree.get_children()), ["broken.flac", "other.ogg"])
+    check("files without tags are listed by file name", sorted(app.card_tree.set(i, "Title") for i in app.card_tree.get_children()), ["broken.flac", "other.ogg"])
     app.card_tree.selection_set(os.path.join(lib, "broken.flac"))
     root.update()
-    x, _, w, _ = app.card_tree.bbox(os.path.join(lib, "broken.flac"), "狀況")
+    x, _, w, _ = app.card_tree.bbox(os.path.join(lib, "broken.flac"), "Status")
     check("the reason is in view after a card without that column", 0 < x + w <= app.card_tree.winfo_width(), True)
     check("a damaged file says what is wrong", all(x in detail() for x in ("檔案損壞或無法讀取", "錯誤：")) and "內嵌歌詞" not in detail(), True)
     for p in extra:
@@ -397,7 +397,7 @@ with mock.patch("lyricstool.app.dialogs") as box, mock.patch("lyricstool.app.fil
     app.fill_review()
     check("cleanup suggested again", rows(), 1)
     first = app.tree.get_children()[0]
-    check("says what it is", (app.tree.set(first, "行為類型"), app.tree.set(first, "來源")), ("清理製作名單", "現有歌詞"))
+    check("says what it is", (app.tree.set(first, "Type"), app.tree.set(first, "Source")), ("清理製作名單", "現有歌詞"))
     shot("6_cleanup")
     app.v_credits.set(False)
     app.save_settings()
@@ -417,7 +417,7 @@ with mock.patch("lyricstool.app.dialogs") as box, mock.patch("lyricstool.app.fil
     shot("10_backup_tick")
     box.confirm_risk.return_value = False
     app.chk_backup_review.invoke()
-    check("turning backups off warns, cancelling keeps them on", (box.confirm_risk.call_args[0][1], app.v_backup.get(), cfg["backup_enabled"], app.btn_write.cget("text")), (BACKUP_RISK, True, True, "備份並寫入 1 首"))
+    check("turning backups off warns, cancelling keeps them on", (box.confirm_risk.call_args[0][1], app.v_backup.get(), cfg["backup_enabled"], app.btn_write.cget("text")), (i18n.tr(BACKUP_RISK), True, True, "備份並寫入 1 首"))
     app.v_excluded.set("還沒儲存的修改")
     box.confirm_risk.return_value = True
     app.chk_backup_review.invoke()

@@ -4,13 +4,15 @@ import glob
 import json
 import logging
 import os
+import re
+import string
 import threading
 import time
 from queue import Empty, Queue
 
 from . import audio
 from .clean import INSTRUMENTAL_TITLE, clean_lrc, is_synced, last_stamp, lyric_state, squash, strip_credits, sung_lines
-from .i18n import stored_text, tr
+from .i18n import ZH, stored_text, tr
 from .sources import Busy, Lane, Paused, artist_parts, build_sources, make_query
 from .store import text_hash
 
@@ -23,11 +25,11 @@ ALBUM_SAMPLE = 3  # an album is given up on only when this many of its songs all
 RETRY_PATIENCE = 180
 INSTRUMENTAL_NOTE = "；純音樂："  # in a busy song's lookup row, after the sources that still owe an answer
 TITLE_NOTE = "歌名標示"  # in the lookup row of a song its title calls instrumental, where a source's name goes otherwise
-KIND_NAMES = {"new": "新歌詞", "cleanup": "清理製作名單"}
+KIND_NAMES = {"new": "New lyrics", "cleanup": "Credit cleanup"}
 # Stored as [code] or [code, number] and worded when shown, so a flag reads in the language of the day.
-FLAGS = {"length_diff": "長度差 {n:.1f} 秒", "few_lines": "僅 {n} 行", "ends_early": "歌詞在歌曲中段前就結束", "masked": "部分文字被遮蔽（*）",
-         "title_differs": "歌名不完全相同", "replaces_plain": "會取代純文字歌詞",
-         "said_instrumental": "有來源或先前紀錄說是純音樂"}
+FLAGS = {"length_diff": "Length differs by {n:.1f} s", "few_lines": "Only {n} lines", "ends_early": "Lyrics end before the middle of the song", "masked": "Some words are masked (*)",
+         "title_differs": "Title is not an exact match", "replaces_plain": "Replaces plain lyrics",
+         "said_instrumental": "A source or an earlier lookup says instrumental"}
 
 
 class Ctx:
@@ -95,12 +97,12 @@ def run_scan(store, cfg, ctx):
     """Read tags of new or changed files. Read-only on music; unchanged files are not opened again."""
     library = cfg["library"]
     if not os.path.isdir(library):
-        raise ValueError(tr("找不到音樂資料夾：{folder}", folder=library))
-    ctx.status(tr("正在列出檔案…"))
+        raise ValueError(tr("Music folder not found: {folder}", folder=library))
+    ctx.status(tr("Listing files…"))
     known = store.known_files()
     paths = list(walk_audio(library, cfg["excluded"]))
     if not paths and known:
-        raise ValueError(tr("{folder} 中找不到任何音樂檔，可能是磁碟未連接。原有資料已保留。", folder=library))
+        raise ValueError(tr("No music files found in {folder}; the drive may not be connected. Existing data was kept.", folder=library))
     changed = 0
     for n, path in enumerate(paths, 1):
         if ctx.cancelled():
@@ -116,7 +118,7 @@ def run_scan(store, cfg, ctx):
         scan_one(store, path, ext, st)
         if changed % 50 == 0:
             store.commit()
-            ctx.progress(n, len(paths), tr("已讀取 {n}/{total} 首", n=n, total=len(paths)))
+            ctx.progress(n, len(paths), tr("Read {n}/{total}", n=n, total=len(paths)))
     if not ctx.cancelled():
         gone = set(known) - set(paths)
         store.drop_tracks(gone)  # review items stay: if a drive dropped out mid-walk, they come back with the files on the next scan
@@ -126,7 +128,7 @@ def run_scan(store, cfg, ctx):
         else:
             n_clean = 0
             store.db.execute("delete from items where state='pending' and kind='cleanup'")
-        ctx.log(tr("掃描完成：{total} 首，更新 {changed} 首，移除 {gone} 首，建議清理製作名單 {clean} 首", total=len(paths), changed=changed, gone=len(gone), clean=n_clean))
+        ctx.log(tr("Scan done. Songs: {total}, updated: {changed}, removed: {gone}, credit cleanups suggested: {clean}", total=len(paths), changed=changed, gone=len(gone), clean=n_clean))
     store.commit()
 
 
@@ -173,20 +175,36 @@ def flags_for(track, hit, cleaned):
 
 
 def flag_text(flag):
-    """Flags were stored as text before 1.12; those are shown as they were written."""
-    if isinstance(flag, str):
-        return flag
     code, *n = flag
     return tr(FLAGS[code], n=n[0] if n else None)
+
+
+def upgrade_flags(store):
+    """Before 1.12 a flag was stored as its Chinese wording, which stayed Chinese in the English window; each becomes its code."""
+    wordings = [(code, re.compile("".join(re.escape(text) + (r"([\d.]+)" if field else "") for text, field, _, _ in string.Formatter().parse(ZH[w]))))
+                for code, w in FLAGS.items()]
+
+    def code_of(flag):
+        for code, wording in wordings:
+            m = wording.fullmatch(flag)
+            if m:
+                return [code, *map(json.loads, m.groups())]  # "17" comes back an int, "2.0" a float, as they were before being worded
+        raise ValueError(f"unknown flag in the database: {flag}")
+
+    for r in store.db.execute("select id,flags from items").fetchall():
+        flags = json.loads(r["flags"])
+        if any(isinstance(f, str) for f in flags):
+            store.db.execute("update items set flags=? where id=?", (json.dumps([code_of(f) if isinstance(f, str) else f for f in flags]), r["id"]))
+    store.db.commit()
 
 
 def action_text(item):
     """What writing this row will do, then anything worth a second look."""
     if item["kind"] != "new":
-        return tr("刪除 {n} 行製作名單", n=len(json.loads(item['removed'])))
-    action = tr("取代純文字歌詞" if item["track_state"] == "plain" else "寫入新歌詞")
+        return tr("Remove credits: {n}", n=len(json.loads(item['removed'])))
+    action = tr("Replace plain lyrics" if item["track_state"] == "plain" else "Write new lyrics")
     flags = [flag_text(f) for f in json.loads(item["flags"])]
-    return tr("；").join([action] + [f for f in flags if f != tr(FLAGS["replaces_plain"])])
+    return tr("; ").join([action] + [f for f in flags if f != tr(FLAGS["replaces_plain"])])
 
 
 def lookup_one(sources, track, cfg, store, ctx, failed=None, lanes=None):
@@ -214,14 +232,14 @@ def lookup_one(sources, track, cfg, store, ctx, failed=None, lanes=None):
                 s, hit = answers.get(timeout=0.2)
             except Empty:
                 if time.monotonic() > deadline:
-                    failed.update(dict.fromkeys(waiting, "逾時"))
+                    failed.update(dict.fromkeys(waiting, "timed out"))
                     break
                 continue
             waiting.remove(s)
             if isinstance(hit, Exception):
                 if not isinstance(hit, Busy):
                     log.error("source %s failed on %s", s.label, track["path"], exc_info=hit)
-                failed[s] = "暫停中" if isinstance(hit, Paused) else "忙碌" if isinstance(hit, Busy) else "出錯"
+                failed[s] = "paused" if isinstance(hit, Paused) else "busy" if isinstance(hit, Busy) else "error"
                 continue
             if hit is None:
                 continue
@@ -275,16 +293,16 @@ def run_lookup(store, cfg, ctx, statuses=("never", "busy"), text=""):
     targets = [t for t in every if tagged(t)]
     untagged = [t["path"] for t in every if not tagged(t)]
     if untagged:
-        ctx.log(tr("{n} 首缺少歌手或歌名標籤，已略過：", n=len(untagged)))
+        ctx.log(tr("Skipped for lack of an artist or title tag ({n}):", n=len(untagged)))
         for path in untagged:
             ctx.log(f"  {path}")
     if not targets:
-        ctx.log(tr("沒有需要查詢的歌曲"))
+        ctx.log(tr("No songs to look up"))
         return {}
     sources = build_sources(cfg, ctx)
     if not sources:
-        raise ValueError(tr("沒有可用的歌詞來源，請至「設定」開啟。"))
-    ctx.log(tr("同時查詢的來源：{sources}", sources=tr("、").join(stored_text(s.label) for s in sources)))
+        raise ValueError(tr("No lyrics sources are on. Turn some on in Settings."))
+    ctx.log(tr("Sources asked together: {sources}", sources=tr(", ").join(stored_text(s.label) for s in sources)))
     counts = {}
     total = len(targets)
 
@@ -303,7 +321,7 @@ def run_lookup(store, cfg, ctx, statuses=("never", "busy"), text=""):
                     left = len(retry) + (len(queue) - n + 1 if round_no > 1 else 0)  # after the first round, songs not reached are still busy
                     if left:
                         counts["busy"] = left
-                    ctx.log(tr("已停止。查詢結果已儲存，下次會接續查詢：{summary}", summary=summary(counts)))
+                    ctx.log(tr("Stopped. Results are saved, and the next lookup carries on from here: {summary}", summary=summary(counts)))
                     return counts
                 if not os.path.exists(t["path"]):
                     continue
@@ -315,12 +333,12 @@ def run_lookup(store, cfg, ctx, statuses=("never", "busy"), text=""):
                 if round_no > 1:
                     rest = resting(asking)
                     if rest > RETRY_PATIENCE:
-                        ctx.log(tr("{sources} 仍在休息，剩下 {n} 首留到下一輪" if round_no < MAX_PASSES else "{sources} 仍在休息，剩下 {n} 首留到下次查詢",
-                                   sources=tr("、").join(stored_text(s.label) for s in asking), n=len(queue) - n + 1))
+                        ctx.log(tr("{sources} still resting; the songs left ({n}) wait for the next round" if round_no < MAX_PASSES else "{sources} still resting; the songs left ({n}) wait for the next lookup",
+                                   sources=tr(", ").join(stored_text(s.label) for s in asking), n=len(queue) - n + 1))
                         retry += queue[n - 1:]
                         break
                     if rest:  # asked while resting, the song would be marked busy at once without the source ever being asked
-                        ctx.wait(rest + 1, tr("等待來源恢復，{} 秒後重查"))
+                        ctx.wait(rest + 1, tr("Waiting for sources to recover; asking again in {} s"))
                 ctx.progress(total - len(queue) + n - 1, total, f"{t['artist']} - {t['title']}")
                 failed = {}
                 status = lookup_one(asking, t, cfg, store, ctx, failed, lanes)
@@ -328,8 +346,8 @@ def run_lookup(store, cfg, ctx, statuses=("never", "busy"), text=""):
                     if round_no > 1:
                         retry.append((t, asking))
                     continue
-                why = tr("（{reasons}）", reasons=tr("、").join(f"{stored_text(s.label)} {tr(reason)}" for s, reason in failed.items())) if status == "busy" else ""
-                ctx.log(tr("{status}{why}：{artist} - {title}", status=tr(LABELS[status]), why=why, artist=t['artist'] or t['album_artist'], title=t['title']))
+                why = tr(" ({reasons})", reasons=tr(", ").join(f"{stored_text(s.label)} {tr(reason)}" for s, reason in failed.items())) if status == "busy" else ""
+                ctx.log(tr("{status}{why}: {artist} - {title}", status=tr(LABELS[status]), why=why, artist=t['artist'] or t['album_artist'], title=t['title']))
                 if status == "busy":
                     retry.append((t, failed))  # the other sources already answered, so only these get asked again
                     continue
@@ -341,55 +359,55 @@ def run_lookup(store, cfg, ctx, statuses=("never", "busy"), text=""):
                     # decided once: albums that are mostly sung but miss a few songs are common, and a share of misses gave up on them too
                     if tally == [ALBUM_SAMPLE, ALBUM_SAMPLE]:
                         given_up.add(album)
-                        ctx.log(tr("略過整張專輯（前 {n} 首都找不到）：{album}", n=ALBUM_SAMPLE, album=t['album'] or os.path.basename(album)))
+                        ctx.log(tr("Skipping the album (first {n} songs not found): {album}", n=ALBUM_SAMPLE, album=t['album'] or os.path.basename(album)))
             ctx.progress(total - len(retry), total, "")
             queue = retry
             if not queue:
                 break
             if round_no < MAX_PASSES:
                 wait = retry_wait(queue)
-                ctx.log(tr("{n} 首因來源忙碌需要重查，約 {minutes:.0f} 分鐘後自動重試（第 {round} 輪）", n=len(queue), minutes=max(wait / 60, 1), round=round_no + 1))
-                ctx.wait(wait, tr("等待來源恢復，{} 秒後重查"))
+                ctx.log(tr("Songs to ask again because a source was busy: {n}. Trying again in about {minutes:.0f} min (round {round})", n=len(queue), minutes=max(wait / 60, 1), round=round_no + 1))
+                ctx.wait(wait, tr("Waiting for sources to recover; asking again in {} s"))
     finally:
         for lane in lanes.values():
             lane.close()
     if queue:
         counts["busy"] = len(queue)
-    ctx.log(tr("查詢完成：{summary}", summary=summary(counts)))
+    ctx.log(tr("Lookup done: {summary}", summary=summary(counts)))
     return counts
 
 
-LABELS = {"found": "找到", "notfound": "查無歌詞", "instrumental": "純音樂", "busy": "待重查", "skipped": "整張專輯略過", "dismissed": "與先前移除的歌詞相同"}
+LABELS = {"found": "Found", "notfound": "No lyrics found", "instrumental": "Instrumental", "busy": "To ask again", "skipped": "Album skipped", "dismissed": "Same as lyrics removed before"}
 
 
 def summary(counts):
-    return tr("、").join(tr("{label} {n} 首", label=tr(LABELS[k]), n=v) for k, v in counts.items()) or tr("沒有結果")
+    return tr(", ").join(tr("{label}: {n}", label=tr(LABELS[k]), n=v) for k, v in counts.items()) or tr("no results")
 
 
 def run_write(store, cfg, ctx):
     """Write everything ticked. Each file is rechecked first: the library keeps changing while lists sit waiting."""
     items = store.selected_items()
     if not items:
-        ctx.log(tr("尚未勾選要寫入的歌曲"))
+        ctx.log(tr("No songs are ticked for writing"))
         return {"ok": 0, "failed": [], "stale": []}
     folder, backup = "", None
     if cfg["backup_enabled"]:
         folder = os.path.join(os.path.abspath(cfg["backup_root"]), time.strftime("app_%Y-%m-%d_%H%M%S"))
         backup = audio.Backup(folder)
-        ctx.log(tr("備份資料夾：{folder}", folder=folder))
+        ctx.log(tr("Backup folder: {folder}", folder=folder))
     else:
-        ctx.log(tr("備份已關閉，本次寫入後無法還原"))
+        ctx.log(tr("Backups are off; this write cannot be undone"))
     result = {"ok": 0, "failed": [], "stale": [], "folder": folder}
     for n, it in enumerate(items, 1):
         if ctx.cancelled():
-            ctx.log(tr("已停止。已寫入的歌曲皆通過驗證，其餘仍保留在清單上"))
+            ctx.log(tr("Stopped. Every song written passed verification; the rest stay on the list"))
             break
         path = it["path"]
         ctx.progress(n - 1, len(items), os.path.basename(path))
         reason = stale_reason(store, cfg, it)
         if reason:
             store.set_item_state(it["id"], "stale")
-            if reason == tr("檔案已被替換"):
+            if reason == tr("File was replaced"):
                 store.save_lookup(path, "never")
             result["stale"].append((path, reason))
             continue
@@ -405,30 +423,30 @@ def run_write(store, cfg, ctx):
         scan_one(store, path, os.path.splitext(path)[1].lower(), st)
         store.commit()
     ctx.progress(len(items), len(items), "")
-    ctx.log(tr("寫入完成：成功 {ok} 首、失敗 {failed} 首、因檔案已變動略過 {stale} 首", ok=result['ok'], failed=len(result['failed']), stale=len(result['stale'])))
+    ctx.log(tr("Write done: {ok} written, {failed} failed, {stale} skipped because the file changed", ok=result['ok'], failed=len(result['failed']), stale=len(result['stale'])))
     for path, why in result["failed"] + result["stale"]:
-        ctx.log(tr("  {why}：{path}", why=why, path=path))
+        ctx.log(tr("  {why}: {path}", why=why, path=path))
     return result
 
 
 def stale_reason(store, cfg, it):
     path = it["path"]
     if not os.path.exists(path):
-        return tr("檔案不存在")
+        return tr("File not found")
     if excluded(path, cfg["library"], cfg["excluded"]):
-        return tr("位於略過的資料夾內")
+        return tr("In a skipped folder")
     try:
         info = audio.read_info(path)
     except Exception as e:
-        return tr("無法讀取檔案（{error}）", error=e.__class__.__name__)
+        return tr("Cannot read the file ({error})", error=e.__class__.__name__)
     t = store.track(path)
     if it["kind"] == "new":
         if is_synced(info["lyrics"]):
-            return tr("已經有同步歌詞")
+            return tr("Already has synced lyrics")
         if t and abs(info["length"] - t["length"]) > 1:
-            return tr("檔案已被替換")
+            return tr("File was replaced")
     if text_hash(info["lyrics"]) != it["base_hash"]:
-        return tr("歌詞已被修改")
+        return tr("Lyrics were changed")
     return None
 
 
@@ -470,61 +488,61 @@ def run_restore(store, cfg, ctx, folder, paths=None):
         store.db.execute("delete from lookups where path=?", (path,))  # asked about again, since these lyrics were just rejected
         store.commit()
     ctx.progress(len(rows), len(rows), "")
-    ctx.log(tr("還原完成：{done} 首，略過 {skipped} 首", done=done, skipped=len(skipped)))
+    ctx.log(tr("Restore done: {done} restored, {skipped} skipped", done=done, skipped=len(skipped)))
     for p, why in skipped:
-        ctx.log(tr("  {why}：{path}", why=why, path=p))
+        ctx.log(tr("  {why}: {path}", why=why, path=p))
     return {"done": done, "skipped": skipped}
 
 
 def export_review(rows, path):
     with open(path, "w", encoding="utf-8-sig", newline="") as fh:
         w = csv.writer(fh)
-        w.writerow(map(tr, ["勾選", "行為類型", "歌手", "歌名", "專輯", "來源", "比對結果", "行數", "標記", "刪除的內容", "路徑"]))
+        w.writerow(map(tr, ["Ticked", "Type", "Artist", "Title", "Album", "Source", "Matched", "Lines", "Flags", "Removed lines", "Path"]))
         for r in rows:
-            w.writerow([tr("是" if r["selected"] else "否"), tr(KIND_NAMES[r["kind"]]), r["artist"], r["title"], r["album"], stored_text(r["source"]), r["matched"], r["lines"],
-                        tr("；").join(map(flag_text, json.loads(r["flags"]))), " | ".join(json.loads(r["removed"])), r["path"]])
+            w.writerow([tr("Yes" if r["selected"] else "No"), tr(KIND_NAMES[r["kind"]]), r["artist"], r["title"], r["album"], stored_text(r["source"]), r["matched"], r["lines"],
+                        tr("; ").join(map(flag_text, json.loads(r["flags"]))), " | ".join(json.loads(r["removed"])), r["path"]])
 
 
 def export_missing(rows, path):
-    names = {"never": "尚未查詢", "notfound": "查無歌詞", "instrumental": "純音樂或無歌詞", "busy": "來源忙碌待重查", "found": "待審閱", "dismissed": "已從清單移除"}
+    names = {"never": "Not looked up yet", "notfound": "No lyrics found", "instrumental": "Instrumental or no lyrics", "busy": "Source busy, to ask again", "found": "Waiting for review", "dismissed": "Removed from the list"}
     with open(path, "w", encoding="utf-8-sig", newline="") as fh:
         w = csv.writer(fh)
-        w.writerow(map(tr, ["歌手", "歌名", "專輯", "目前歌詞", "格式", "查詢結果", "路徑"]))
+        w.writerow(map(tr, ["Artist", "Title", "Album", "Current lyrics", "Format", "Lookup result", "Path"]))
         for r in rows:
-            state = {"plain": "純文字", "none": "沒有", "unsupported": "不支援的格式", "unreadable": "無法讀取"}[r["state"]]
+            state = {"plain": "Plain text", "none": "None", "unsupported": "Unsupported format", "unreadable": "Unreadable"}[r["state"]]
             w.writerow([r["artist"], r["title"], r["album"], tr(state), r["ext"], tr(names[r["status"]]), r["path"]])
 
 
 # Written for how aliases are used: only the first two names are searched (LRCLIB takes the tag and the first), every name is compared
 # loosely against the artist a source returns, and Simplified/Traditional, case and accents are already handled. So the other name goes
 # first, the tag second, and guesses are worse than nothing.
-ALIAS_PROMPT = """請幫我整理歌手的別名，給歌詞查詢工具使用。工具會拿這些名稱到 LRCLIB、網易雲音樂、QQ 音樂、酷狗等平台搜尋歌詞，但每位歌手只會用前兩個名稱搜尋。
+ALIAS_PROMPT = """Please put together other names for the artists below, for a lyrics lookup tool. The tool searches LRCLIB, NetEase Cloud Music, QQ Music, Kugou and similar platforms with these names, but searches with only the first two names of each artist.
 
-輸出格式：每行一位歌手，寫成「歌手 = 名稱1, 名稱2, 名稱3」。
-- 等號左邊：照抄我給的名稱，一個字都不要改。
-- 名稱1：這位歌手在音樂平台上最常用、而且和左邊不同的名稱，例如原文名稱、官方英文名稱或官方中文名稱。
-- 名稱2：照抄左邊的名稱。
-- 名稱3 以後：其他確實有平台在用的寫法，沒有就不用寫。
+Output format: one artist per line, written as "artist = name1, name2, name3".
+- Left of the equals sign: the name exactly as I give it, not changed in any way.
+- name1: the name music platforms most often list this artist under that differs from the left, such as the name in its original script, the official English name or the official Chinese name.
+- name2: the name on the left, copied exactly.
+- name3 onwards: other spellings platforms really use; leave them out if there are none.
 
-只列出真的有另一個名稱的歌手。下面這些情況不要列：
-- 只差在簡體和繁體、大小寫、重音符號或空格（工具會自己處理）。
-- 西洋歌手的中文音譯，除非唱片公司或平台正式使用。
-- 本名、綽號、團員、舊團名，或只是相似的名字。
-- 你不確定的。寧可少列也不要猜：錯的名稱會讓工具抓到別人的歌詞。
+Only list artists that really have another name. Do not list:
+- Names that differ only in Simplified or Traditional Chinese, letter case, accents or spaces (the tool handles those).
+- Chinese transliterations of Western artists, unless the record label or platforms officially use them.
+- Birth names, nicknames, band members, former band names, or names that are merely similar.
+- Anything you are not sure of. Better to list too few than to guess: a wrong name makes the tool pick up someone else's lyrics.
 
-可以上網查證，但輸出只要這些行，不要加標題、編號、說明、連結或資料來源。清單太長的話可以分幾次輸出，我會回「繼續」。
+You may look things up online, but output only these lines: no headings, numbering, explanations, links or sources. If the list is long, output it in parts and I will reply "continue".
 
-正確的例子：
+Correct examples:
 Masayoshi Takanaka = 高中正義, Masayoshi Takanaka
 TOUMING MAGAZINE = 透明雜誌, TOUMING MAGAZINE
 椎名林檎 = Sheena Ringo, 椎名林檎, Shiina Ringo
 HYUKOH = 혁오, HYUKOH
 
-不要輸出的例子（括號裡是原因）：
-Arctic Monkeys = 北極猴子, Arctic Monkeys（只是中文音譯）
-Frank Sinatra = Francis Albert Sinatra, Frank Sinatra（本名，平台不用）
+Examples not to output (the reason in brackets):
+Arctic Monkeys = 北極猴子, Arctic Monkeys (only a Chinese transliteration)
+Frank Sinatra = Francis Albert Sinatra, Frank Sinatra (a birth name platforms do not use)
 
-以下是我的歌手：
+Here are my artists:
 
 """
 

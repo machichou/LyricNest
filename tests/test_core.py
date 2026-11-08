@@ -63,14 +63,12 @@ la mia voce che ti dice:|Ты, зажмурившись, кричал:|А я с�
 
 
 class Languages(unittest.TestCase):
-    def test_every_text_shown_has_an_english_one(self):
-        """Any Chinese left in the code is either a key of EN or a value kept in the database; an f-string with Chinese in it fails here too."""
-        cjk = re.compile("[\u3000-\u303f\u3040-\u30ff\u3400-\u9fff\uff00-\uffef]")
-        typed = {"＝"}  # what people type into the alias box, read and never shown
+    @staticmethod
+    def code():
+        """(file name, tree, string literals) of each module, leaving out regexes and docstrings; clean.py matches words inside lyrics."""
         root = os.path.join(os.path.dirname(__file__), "..", "lyricstool")
-        missing = []
         for name in os.listdir(root):
-            if not name.endswith(".py") or name in ("clean.py", "i18n.py"):  # clean.py matches words inside lyrics
+            if not name.endswith(".py") or name in ("clean.py", "i18n.py"):
                 continue
             with open(os.path.join(root, name), encoding="utf-8") as fh:
                 tree = ast.parse(fh.read())
@@ -80,13 +78,28 @@ class Languages(unittest.TestCase):
                 docstring = isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant)
                 if regex or docstring:
                     skip |= {id(n) for n in ast.walk(node)}
-            missing += [f"{name}:{n.lineno} {n.value!r}" for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in skip
-                        and cjk.search(n.value) and n.value not in i18n.EN and n.value not in i18n.STORED and n.value not in typed]
-        self.assertEqual(missing, [])
+            yield name, tree, [n for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in skip]
 
-    def test_english_fills_in_the_same_values(self):
+    def test_the_code_is_written_in_english(self):
+        """Chinese is left only in values kept in the database and in the names of examples; an f-string with Chinese in it fails here too."""
+        cjk = re.compile("[　-〿぀-ヿ㐀-鿿＀-￯]")
+        typed = {"＝"}  # what people type into the alias box, read and never shown
+        left = [f"{name}:{n.lineno} {n.value!r}" for name, _, consts in self.code() for n in consts
+                if cjk.search(n.value) and n.value not in i18n.STORED and n.value not in i18n.ZH and n.value not in typed]
+        self.assertEqual(left, [])
+
+    def test_every_text_shown_has_a_chinese_one(self):
+        """Texts handed to tr() as written, and the tables whose entries go through tr() when shown."""
+        from lyricstool import app
+        missing = [f"{name}:{n.lineno} {n.args[0].value!r}" for name, tree, _ in self.code() for n in ast.walk(tree)
+                   if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "tr" and isinstance(n.args[0], ast.Constant) and n.args[0].value not in i18n.ZH]
+        tables = [*jobs.KIND_NAMES.values(), *jobs.FLAGS.values(), *jobs.LABELS.values(), *app.WHY.values(), *(name for name, _ in app.CARDS.values()),
+                  *(name for name, _, _ in app.CARD_COLUMNS)]
+        self.assertEqual(missing + [t for t in tables if t not in i18n.ZH], [])
+
+    def test_chinese_fills_in_the_same_values(self):
         names = lambda s: sorted(f for _, f, _, _ in string.Formatter().parse(s) if f is not None)
-        self.assertEqual([k for k, v in i18n.EN.items() if names(k) != names(v)], [])
+        self.assertEqual([k for k, v in i18n.ZH.items() if names(k) != names(v)], [])
 
     def test_english(self):
         i18n.use("en")
@@ -95,8 +108,23 @@ class Languages(unittest.TestCase):
         self.assertEqual(i18n.stored_text("網易雲（已轉繁體）"), "NetEase (converted to Traditional)")
         self.assertEqual(i18n.stored_text("網易雲、酷狗；純音樂：LRCLIB（線上）"), "NetEase, Kugou; instrumental: LRCLIB (online)")
         self.assertEqual(jobs.flag_text(["length_diff", 2.8]), "Length differs by 2.8 s")
-        self.assertEqual(jobs.flag_text("長度差 2.8 秒"), "長度差 2.8 秒", "flags stored as text by older versions are shown as they are")
         self.assertTrue(jobs.alias_prompt(["陳綺貞"], {})[0].startswith("Please"))
+
+    def test_flags_stored_as_chinese_words_become_codes(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        store = Store(os.path.join(d, "s.sqlite"))
+        self.addCleanup(store.db.close)
+        old = ["長度差 2.0 秒", "僅 17 行", "部分文字被遮蔽（*）", "會取代純文字歌詞"]
+        store.put_item("a.flac", "new", "網易雲", "", [], old, 20, "", 0, "")
+        store.put_item("b.flac", "new", "網易雲", "", [], [["few_lines", 4]], 4, "", 0, "")
+        jobs.upgrade_flags(store)
+        flags = {r["path"]: json.loads(r["flags"]) for r in store.db.execute("select path,flags from items")}
+        self.assertEqual(flags, {"a.flac": [["length_diff", 2.0], ["few_lines", 17], ["masked"], ["replaces_plain"]], "b.flac": [["few_lines", 4]]})
+        self.assertEqual([jobs.flag_text(f) for f in flags["a.flac"]], old, "worded as before")
+        store.put_item("c.flac", "new", "網易雲", "", [], ["沒聽過的標記"], 20, "", 0, "")
+        with self.assertRaises(ValueError):
+            jobs.upgrade_flags(store)
 
     def test_a_language_from_an_edited_settings_file(self):
         self.addCleanup(i18n.use, "zh-TW")
@@ -287,8 +315,9 @@ class Matching(unittest.TestCase):
 
     def test_alias_prompt_names_each_artist_without_an_alias_once(self):
         text, n = jobs.alias_prompt(["Lisa Ono", "陳綺貞", "方大同 (feat. 张靓颖)", "Lisa Ono & 陳綺貞"], {"lisa ono": ["小野リサ"]})
-        self.assertTrue(text.startswith(jobs.ALIAS_PROMPT))
-        self.assertEqual((text[len(jobs.ALIAS_PROMPT):].split("\n"), n), (["张靓颖", "方大同", "陳綺貞"], 3))
+        prompt = i18n.tr(jobs.ALIAS_PROMPT)
+        self.assertTrue(text.startswith(prompt))
+        self.assertEqual((text[len(prompt):].split("\n"), n), (["张靓颖", "方大同", "陳綺貞"], 3))
 
     def test_sources_ask_netease_before_lrclib(self):
         cfg = {"sources": {"sidecar": True, "lrcget": True, "lrclib": True, "netease": True, "qq": True, "kugou": True}, "lrcget_db": "", "lrclib_db": ""}
@@ -585,7 +614,7 @@ class Files(unittest.TestCase):
 
         resting, failed = Resting(), {}
         self.assertEqual(jobs.lookup_one([resting, Fake(None)], self.track(store, "a.flac"), cfg, store, ctx, failed), "busy")
-        self.assertEqual(failed, {resting: "暫停中"}, "a paused source is noted as paused, not as refusing")
+        self.assertEqual(failed, {resting: "paused"}, "a paused source is noted as paused, not as refusing")
 
     def test_retry_asks_only_the_source_that_failed(self):
         class Flaky:

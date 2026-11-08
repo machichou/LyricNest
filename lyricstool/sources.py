@@ -185,17 +185,17 @@ class Limiter:
                 break
             if wait > QUICK_RETRY:
                 self.suspended_until = time.monotonic() + wait
-                self.ctx.status(tr("{source} 暫時無法查詢（來源忙碌），休息 {wait} 秒，其他來源繼續查詢", source=stored_text(self.label), wait=wait))
+                self.ctx.status(tr("{source} is busy; resting {wait} s while the other sources carry on", source=stored_text(self.label), wait=wait))
                 break
-            self.ctx.wait(wait, tr("{source} 暫時無法查詢（來源忙碌），{{}} 秒後重試（第 {n} 次）", source=stored_text(self.label), n=attempt + 1), stop=_settled)
+            self.ctx.wait(wait, tr("{source} is busy; trying again in {{}} s (attempt {n})", source=stored_text(self.label), n=attempt + 1), stop=_settled)
             if self.ctx.cancelled() or _settled():
                 raise Busy(self.label)
-            self.ctx.status(tr("{source} 重試中（第 {n} 次）…", source=stored_text(self.label), n=attempt + 1))  # the request can take up to its 30-second timeout; the countdown must not sit at 1 meanwhile
+            self.ctx.status(tr("{source} trying again (attempt {n})…", source=stored_text(self.label), n=attempt + 1))  # the request can take up to its 30-second timeout; the countdown must not sit at 1 meanwhile
         self.fails += 1
         if self.fails >= 3:
             self.suspended_until = time.monotonic() + SUSPEND_SECONDS
             self.fails = 0
-            self.ctx.log(tr("{source} 連續無法查詢，暫停使用 10 分鐘，其他來源繼續查詢；這段期間的歌曲之後會自動重查", source=stored_text(self.label)))
+            self.ctx.log(tr("{source} keeps refusing, so it is paused for 10 minutes while the other sources carry on; songs from this time are asked again automatically", source=stored_text(self.label)))
             self.ctx.emit("limited", self.label)
         raise Busy(self.label)
 
@@ -433,14 +433,14 @@ def build_sources(cfg, ctx):
         try:
             out.append(Lrcget(cfg["lrcget_db"]))
         except sqlite3.Error as e:
-            ctx.log(tr("無法開啟 LRCGET 資料庫，已略過：{e}", e=e))
+            ctx.log(tr("Cannot open the LRCGET database, skipped: {e}", e=e))
     local = None
     if on.get("lrclib") and cfg.get("lrclib_db") and os.path.exists(cfg["lrclib_db"]):
         try:
             local = LocalLrclib(cfg["lrclib_db"])
             out.append(local)
         except sqlite3.Error as e:
-            ctx.log(tr("無法開啟 LRCLIB 本機資料庫，改為查詢線上資料：{e}", e=e))
+            ctx.log(tr("Cannot open the local LRCLIB database, looking up online instead: {e}", e=e))
     if on.get("netease"):
         out.append(NetEase(ctx))
     if on.get("lrclib") and local is None:
