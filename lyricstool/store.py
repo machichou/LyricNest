@@ -1,4 +1,4 @@
-"""Settings and the app's own database, under %LOCALAPPDATA%\\LyricsTool. Music files are never touched here."""
+"""Settings and the app's own database, under %LOCALAPPDATA%\\LyricsBox. Music files are never touched here."""
 import hashlib
 import json
 import os
@@ -22,7 +22,16 @@ WHY_SQL = "case when t.state in('unsupported','unreadable') then t.state else co
 
 
 def data_dir():
-    d = os.environ.get("LYRICSTOOL_DATA") or os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), "LyricsTool")
+    if os.environ.get("LYRICSTOOL_DATA"):
+        d = os.environ["LYRICSTOOL_DATA"]
+    else:
+        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+        d, old = os.path.join(base, "LyricsBox"), os.path.join(base, "LyricsTool")
+        if not os.path.exists(d) and os.path.isdir(old):
+            try:
+                os.rename(old, d)  # the program was called LyricsTool before 1.13; its settings and lookup history carry over
+            except OSError:  # a copy of the old version still running holds it; keep using it and move it next time
+                d = old
     os.makedirs(d, exist_ok=True)
     return d
 

@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from lyricstool import audio, i18n, jobs
 from lyricstool.clean import clean_lrc, is_credit, strip_credits
 from lyricstool.sources import Busy, Hit, Lane, Limiter, NetEase, Paused, OnlineLrclib, QQMusic, Retry, build_sources, Sidecar, make_query, matches, names_for, usable
-from lyricstool.store import Store, default_config, text_hash
+from lyricstool.store import Store, data_dir, default_config, text_hash
 
 i18n.use("zh-TW")  # the texts expected below are the Chinese ones
 
@@ -541,6 +541,17 @@ class Files(unittest.TestCase):
         self.assertEqual((cfg["library"], cfg["excluded"], cfg["lrclib_db"], cfg["aliases"]), ("", [], "", {}))
         self.assertEqual(cfg["backup_root"], os.path.join(self.d, "backups"))
         self.assertTrue(cfg["backup_enabled"])
+
+    def test_data_from_before_the_rename_carries_over(self):
+        old = os.path.join(self.d, "LyricsTool")
+        os.makedirs(old)
+        open(os.path.join(old, "settings.json"), "w").close()
+        env = {k: v for k, v in os.environ.items() if k != "LYRICSTOOL_DATA"}
+        with mock.patch.dict(os.environ, dict(env, LOCALAPPDATA=self.d), clear=True):
+            self.assertEqual(data_dir(), os.path.join(self.d, "LyricsBox"))
+            os.makedirs(old)
+            self.assertEqual(data_dir(), os.path.join(self.d, "LyricsBox"), "an old folder made later is left alone")
+        self.assertTrue(os.path.exists(os.path.join(self.d, "LyricsBox", "settings.json")))
 
     def track(self, store, name):
         return store.db.execute("select *, 0 status from tracks where path=?", (os.path.join(self.lib, name),)).fetchone()

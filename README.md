@@ -1,6 +1,6 @@
 <div align="center">
 
-# LyricsTool
+# LyricsBox
 
 **Synced lyrics for your whole music library, from 6 free sources at once.**
 
@@ -24,7 +24,7 @@
 
 ---
 
-Many music players only show lyrics embedded in the file. LyricsTool finds time-synced lyrics for the songs that have none, cleans them up, and writes them in after you've checked them. One `.exe`, nothing to install.
+Many music players only show lyrics embedded in the file. LyricsBox finds time-synced lyrics for the songs that have none, cleans them up, and writes them in after you've checked them. One `.exe`, nothing to install.
 
 ## Features
 
@@ -110,12 +110,12 @@ flowchart TD
 
 ## Getting started
 
-1. Download `LyricsTool.exe` from [Releases](../../releases) and run it.
+1. Download `LyricsBox.exe` from [Releases](../../releases) and run it.
 2. **Settings**: pick your music folder and a backup folder, then **Save settings**.
 3. **Look Up Lyrics**: click **Start lookup**.
 4. **Review & Write**: untick anything wrong, then **Back up and write**.
 
-Settings and lookup history live in `%LOCALAPPDATA%\LyricsTool`.
+Settings and lookup history live in `%LOCALAPPDATA%\LyricsBox`.
 
 ## Development
 

@@ -8,12 +8,12 @@ with open("assets/version.txt", "w", encoding="utf-8") as fh:
   kids=[
     StringFileInfo([StringTable('040404B0', [
       StringStruct('CompanyName', '{__author__}'),
-      StringStruct('FileDescription', '歌詞工具'),
+      StringStruct('FileDescription', 'LyricsBox'),
       StringStruct('FileVersion', '{__version__}'),
-      StringStruct('InternalName', 'LyricsTool'),
+      StringStruct('InternalName', 'LyricsBox'),
       StringStruct('LegalCopyright', '© 2026 {__author__}'),
-      StringStruct('OriginalFilename', 'LyricsTool.exe'),
-      StringStruct('ProductName', '歌詞工具'),
+      StringStruct('OriginalFilename', 'LyricsBox.exe'),
+      StringStruct('ProductName', 'LyricsBox'),
       StringStruct('ProductVersion', '{__version__}')])]),
     VarFileInfo([VarStruct('Translation', [0x0404, 1200])])
   ]

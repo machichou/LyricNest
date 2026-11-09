@@ -49,7 +49,7 @@ def stored_text(text):
 
 ZH = {
     # window, tabs, status bar
-    "LyricsTool": "歌詞工具",
+    "LyricsBox": "LyricsBox",
     "Overview": "總覽",
     "Look Up Lyrics": "查詢歌詞",
     "Review & Write": "審閱與寫入",
@@ -159,7 +159,7 @@ ZH = {
     "Backup folder: {folder}": "備份資料夾：{folder}",
     "   Backups are off; songs written from now on will not be listed here": "　備份已關閉，之後寫入的歌曲不會列在此處",
     # settings
-    "LyricsTool {version}   by {author}   built with help from Claude": "歌詞工具 {version}　作者：{author}　由 Claude 協助開發",
+    "LyricsBox {version}   by {author}   built with help from Claude": "LyricsBox {version}　作者：{author}　由 Claude 協助開發",
     "Save settings": "儲存設定",
     "Open log folder": "開啟記錄檔資料夾",
     "Music folder": "音樂資料夾",
@@ -188,7 +188,7 @@ ZH = {
     "No": "否",
     "Yes": "是",
     "Cancel": "取消",
-    "LyricsTool is already running.": "歌詞工具已在執行中。",
+    "LyricsBox is already running.": "LyricsBox 已在執行中。",
     "A job is running. Wait for it to finish, or click Stop first.": "目前有工作正在進行，請等待完成或先按「停止」。",
     "A job is running. Wait for it to finish, or click Stop, before saving settings.": "目前有工作正在進行，請等待完成或先按「停止」，再儲存設定。",
     "A job is running. Stop it and close?\nWhat is done so far is kept.": "目前有工作正在進行，要停止並關閉程式嗎？\n已完成的部分會保留。",
@@ -229,7 +229,7 @@ ZH = {
     "• Replaced plain lyrics and removed credits cannot be recovered.\n\nAudio is not affected, and the checks before and after writing still run.\nExisting backups are not affected.":
         "關閉備份後，寫入歌詞前將不會保存原本的標籤：\n\n• 寫入錯誤的歌詞時，無法透過「備份還原」復原，只能手動修正。\n• 被取代的純文字歌詞與刪除的製作名單將無法復原。\n\n"
         "音訊不受影響，寫入前後的檢查也會照常進行。\n現有的備份不會受到影響。",
-    "The new language is used from the next time LyricsTool starts.": "重新開啟程式後就會套用新的語言。",
+    "The new language is used from the next time LyricsBox starts.": "重新開啟程式後就會套用新的語言。",
     "songs without synced lyrics.csv": "缺少同步歌詞的歌曲.csv",
     "review list.csv": "審閱清單.csv",
     # jobs: scan
