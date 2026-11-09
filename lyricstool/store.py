@@ -27,7 +27,7 @@ def data_dir():
     else:
         base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
         d = os.path.join(base, "LyricNest")
-        # the program was called LyricsTool before 1.13 and LyricsBox before 1.14; its settings and lookup history carry over
+        # before its first release the program was called LyricsTool, then LyricsBox; its settings and lookup history carry over
         old = next((p for p in (os.path.join(base, "LyricsBox"), os.path.join(base, "LyricsTool")) if os.path.isdir(p)), None)
         if not os.path.exists(d) and old:
             try:
