@@ -1,36 +1,123 @@
-# 歌詞工具
+<div align="center">
 
-把同步歌詞內嵌進音樂檔，讓只讀取內嵌歌詞的音樂軟體（例如未連網的 Roon）也能顯示動態歌詞。程式為單一檔案 `dist\LyricsTool.exe`，不需安裝。
+# LyricsTool
 
-作者：machi，由 Claude 協助開發。
+**Synced lyrics for your whole music library, from 6 free sources at once.**
 
-## 使用流程
+**English** &nbsp;·&nbsp; [繁體中文](README.zh-TW.md)
 
-1. **總覽**：開啟時會自動掃描，顯示已有歌詞的歌曲數量，以及缺少歌詞的原因。點選四張卡片可查看該類歌曲，包含格式與音質（例如 24/48.0kHz），以及每首的詳細資料與內嵌歌詞。
-2. **查詢歌詞**：選擇查詢範圍後按「開始查詢」，程式會同時查詢 .lrc 外掛檔、LRCGET、網易雲、LRCLIB、QQ 音樂和酷狗，哪個先找到就用哪個，接著換下一首。可以隨時停止或關閉，下次會接續查詢。來源忙碌時會等待並顯示倒數，查完後自動重查尚未回覆的來源，最多三輪。某個來源連續拒絕查詢時會暫停使用 10 分鐘，並跳出視窗詢問是否先停止、過一段時間再查。
-3. **審閱與寫入**：可查看每首的來源、需留意事項、將刪除的內容與完整歌詞。按下「備份並寫入」才會更動音樂檔。掃描時若發現現有歌詞夾雜製作名單，也會列在這裡，行為類型顯示「清理製作名單」，寫入時只會刪除這些內容。若不想刪除，請在設定取消「移除製作名單等非歌詞內容」，這些建議會收回，之後查到的歌詞也會保留原樣；已在清單上的新歌詞不受影響。
-4. **備份還原**：列出所有備份批次（包含這個程式出現之前的），可以整批還原或只還原部分歌曲。
-5. **設定**：路徑旁的「瀏覽」可以選資料夾或檔案，按右上角「儲存設定」才會儲存並重新掃描。「寫入前先備份原本的標籤」可以取消，取消時會先說明風險；關閉後寫入的歌曲無法還原。審閱頁的寫入按鈕旁有同一個勾選，兩處同步，變更會立即生效。勾選「專輯前 3 首都找不到時，略過整張專輯」後，同一張專輯（同一個資料夾）最先查的 3 首都找不到（純音樂也算），剩下的歌就不再查詢，直接記成查無歌詞；3 首裡有任何一首找到，整張都會查。
+![.lrc file](https://img.shields.io/badge/-.lrc%20file-555?style=for-the-badge)
+![LRCGET](https://img.shields.io/badge/-LRCGET-2f6f9f?style=for-the-badge)
+![LRCLIB](https://img.shields.io/badge/-LRCLIB-1f8a70?style=for-the-badge)
+![NetEase](https://img.shields.io/badge/-NetEase-c20c0c?style=for-the-badge)
+![QQ Music](https://img.shields.io/badge/-QQ%20Music-31c27c?style=for-the-badge)
+![Kugou](https://img.shields.io/badge/-Kugou-2ca2f9?style=for-the-badge)
 
-## 安全設計
+![Windows](https://img.shields.io/badge/Windows-10%20%C2%B7%2011-0078D4?logo=windows&logoColor=white)
+![Formats](https://img.shields.io/badge/writes-FLAC%20%C2%B7%20MP3-38d591)
+![Interface](https://img.shields.io/badge/interface-English%20%C2%B7%20%E7%B9%81%E9%AB%94%E4%B8%AD%E6%96%87-555)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
-- 寫入前先備份原本的標籤（預設開啟，可在設定關閉）。無論是否備份，都會先確認新檔案的音訊和歌詞正確才替換；替換是原子操作，當機時只會留下舊檔或新檔。替換後會再驗證一次。
-- 寫入前會重新讀取檔案。若檔案已被替換、已有同步歌詞，或歌詞已被修改，就會略過。
-- 被其他程式占用的檔案會寫入失敗，但檔案本身不受影響，仍保留在清單上可以重試。
-- 只寫 FLAC（`LYRICS` 標籤）和 MP3（`USLT`），其他格式只統計。
-- 同一時間只能開啟一個程式。
+<img src="docs/screenshots/en/overview.png" alt="Overview of the library" width="900">
 
-## 資料位置
+</div>
 
-設定、查詢紀錄和記錄檔位於 `%LOCALAPPDATA%\LyricsTool`。刪除後只會失去查詢進度，音樂和備份不受影響。
+---
 
-## 開啟時跳出「Windows 已保護您的電腦」
+Many music players only show lyrics embedded in the file. LyricsTool finds time-synced lyrics for the songs that have none, cleans them up, and writes them in after you've checked them. One `.exe`, nothing to install.
 
-這個 exe 沒有數位簽章，被 Windows 標記為從網路下載的副本才會出現這個畫面，本機打包或複製的檔案不會。出現時請按「其他資訊」再按「仍要執行」，或在檔案內容勾選「解除封鎖」；該視窗可能要等幾分鐘才有反應。
+## Features
 
-作者資訊顯示在檔案內容和設定頁，不會改變這個畫面的「未知的發行者」，該欄只取決於數位簽章。
+<table>
+<tr>
+<td width="50%" valign="top">
 
-## 開發
+### 🔎 6 sources at once
+
+The first good match wins. Busy sources are retried on their own.
+
+<img src="docs/screenshots/en/lookup.png" alt="Look Up Lyrics" width="100%">
+
+</td>
+<td width="50%" valign="top">
+
+### ✅ You check before it writes
+
+Every find waits in a list. Anything odd is flagged.
+
+<img src="docs/screenshots/en/review.png" alt="Review & Write" width="100%">
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+### 🧹 Clean lyrics
+
+Credits and intro cues removed. Simplified Chinese turned Traditional.
+
+<img src="docs/screenshots/en/missing.png" alt="Songs without lyrics, and why" width="100%">
+
+</td>
+<td width="50%" valign="top">
+
+### ♻️ Undo any time
+
+Tags are backed up before every write.
+
+<img src="docs/screenshots/en/backups.png" alt="Backups" width="100%">
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top">
+
+### ⚙️ Made for big libraries
+
+Artist aliases, folders to skip, album skipping, English or 繁體中文.
+
+<img src="docs/screenshots/en/settings.png" alt="Settings" width="70%">
+
+</td>
+</tr>
+</table>
+
+## How it works
+
+```mermaid
+flowchart LR
+    lib[("Music folder<br>FLAC · MP3")] -->|scan| over["Overview<br>what has lyrics, what doesn't"]
+    over --> ask{{"Look up, all at once<br>.lrc file · LRCGET · LRCLIB<br>NetEase · QQ Music · Kugou"}}
+    ask -->|first good match| clean["Clean up<br>credits out · Simplified → Traditional"]
+    clean --> review["Review list<br>flags for anything odd"]
+    review -->|you tick and confirm| write["Back up, write, verify"]
+    write --> restore["Backups<br>restore any time"]
+```
+
+## Safe writing
+
+```mermaid
+flowchart TD
+    a["Re-read the file"] --> b{"Replaced, already synced,<br>or lyrics edited since?"}
+    b -->|yes| skip["Skip it; it stays in the list"]
+    b -->|no| c["Back up the original tags"]
+    c --> d["Write a new copy beside it"]
+    d --> e{"Audio identical and<br>lyrics read back correctly?"}
+    e -->|no| fail["Discard the copy; the file is untouched"]
+    e -->|yes| f["Swap it in, in one step"]
+    f --> g["Check it once more"]
+```
+
+## Getting started
+
+1. Download `LyricsTool.exe` from [Releases](../../releases) and run it.
+2. **Settings**: pick your music folder and a backup folder, then **Save settings**.
+3. **Look Up Lyrics**: click **Start lookup**.
+4. **Review & Write**: untick anything wrong, then **Back up and write**.
+
+Settings and lookup history live in `%LOCALAPPDATA%\LyricsTool`.
+
+## Development
 
 ```bat
 python -m venv .venv
@@ -38,13 +125,8 @@ python -m venv .venv
 build.bat
 ```
 
-版本和作者只寫在 `lyricstool\__init__.py`，打包時會自動寫進檔案內容。
+Tests in `tests\` never write to your library: `test_core.py` (writing and restoring on real audio), `ui_shots.py` (every flow in the real window), `exe_smoke.py` (the built exe), `source_bench.py` (each online source's hit rate).
 
-測試，都不會寫入音樂庫：
+## License
 
-- `tests\test_core.py`：用 ffmpeg 產生真實音訊，測寫入、還原和各種失敗情況，打包時會自動跑。
-- `tests\ui_shots.py`：實際操作視窗的每個流程並截圖，視窗留在其他視窗後面，只有測對話框時會短暫跳出來。
-- `tests\exe_smoke.py`：啟動打包好的 exe 的副本，檢查檔案內容、開啟、重複開啟和關閉，只碰自己的視窗。
-- `tests\source_bench.py`：用 `tests\bench_songs.csv` 的歌單（六種語言，熱門到小眾，取自 Apple Music 與 iTunes），讓每個線上來源各自查完每一首，統計找到率、被拒絕的比例和速度，每首的結果存在 `build\`。不需要音樂檔，但和程式查詢共用同一個網路的查詢額度，請在沒有查詢時執行。
-
-`dist\LyricsTool.exe --selftest 結果.json` 可以檢查打包內容和 HTTPS 連線是否正常。
+[MIT](LICENSE) · by machi, built with help from Claude
