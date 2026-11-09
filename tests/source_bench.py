@@ -49,7 +49,7 @@ def ask(source, songs, results, stats):
 def bench(songs):
     """One thread per source, as in the app, so each keeps its own pace. Returns per song {source label: (outcome, seconds, hit)},
     and per source (times it was rested, minutes it took)."""
-    ctx = jobs.Ctx(lambda kind, text: print(text, file=sys.stderr) if kind == "log" else None)
+    ctx = jobs.Ctx(lambda kind, payload: print(payload[0], file=sys.stderr) if kind == "log" else None)
     sources = [NetEase(ctx), OnlineLrclib(ctx), QQMusic(ctx), Kugou(ctx)]
     results, stats = [{} for _ in songs], {}
     threads = [threading.Thread(target=ask, args=(s, songs, results, stats)) for s in sources]

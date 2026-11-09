@@ -701,7 +701,7 @@ class Files(unittest.TestCase):
         store, cfg, ctx = Store(os.path.join(self.d, "s.sqlite")), self.config(), NoWait()
         jobs.run_scan(store, cfg, ctx)
         logs = []
-        ctx.emit = lambda kind, text: logs.append(text) if kind == "log" else None
+        ctx.emit = lambda kind, payload: logs.append(payload[0]) if kind == "log" else None
         says_none = Fake(Hit("甲", instrumental=True))
         with mock.patch.object(jobs, "build_sources", lambda c, x: [Refuses(), says_none]):
             self.assertEqual(jobs.run_lookup(store, cfg, ctx), {"busy": 3})
@@ -732,7 +732,7 @@ class Files(unittest.TestCase):
         store, cfg, ctx = Store(os.path.join(self.d, "s.sqlite")), self.config(), jobs.Ctx()
         jobs.run_scan(store, cfg, ctx)
         logs = []
-        ctx.emit = lambda kind, text: logs.append(text) if kind == "log" else None
+        ctx.emit = lambda kind, payload: logs.append(payload[0]) if kind == "log" else None
         with mock.patch.object(jobs, "build_sources", lambda c, x: [Fake(None)]):
             jobs.run_lookup(store, cfg, ctx)
         self.assertEqual(logs[:2], ["1 首缺少歌手或歌名標籤，已略過：", "  " + plain])
@@ -751,7 +751,7 @@ class Files(unittest.TestCase):
         store, cfg, ctx = Store(os.path.join(self.d, "s.sqlite")), self.config(), StopsWhileWaiting()
         jobs.run_scan(store, cfg, ctx)
         logs = []
-        ctx.emit = lambda kind, text: logs.append(text) if kind == "log" else None
+        ctx.emit = lambda kind, payload: logs.append(payload[0]) if kind == "log" else None
         with mock.patch.object(jobs, "build_sources", lambda c, x: [Refuses()]):
             self.assertEqual(jobs.run_lookup(store, cfg, ctx), {"busy": 3})
         self.assertEqual(logs[-1], "已停止。查詢結果已儲存，下次會接續查詢：待重查 3 首")
@@ -783,7 +783,7 @@ class Files(unittest.TestCase):
             store, cfg, ctx = Store(os.path.join(self.d, f"{rest}.sqlite")), self.config(), TimePasses()
             jobs.run_scan(store, cfg, ctx)
             logs = []
-            ctx.emit = lambda kind, text: logs.append(text) if kind == "log" else None
+            ctx.emit = lambda kind, payload: logs.append(payload[0]) if kind == "log" else None
             with mock.patch.object(jobs, "build_sources", lambda c, x: [src]):
                 self.assertEqual(jobs.run_lookup(store, cfg, ctx), {"found": 3})
             if rest == 60:

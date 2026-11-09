@@ -56,9 +56,10 @@ class Ctx:
             if self._cancel.wait(1):
                 return
 
-    def log(self, text):
+    def log(self, text, tag=""):
+        """`tag` is a lookup status, for the window to colour the line by."""
         log.info(text)
-        self.emit("log", text)
+        self.emit("log", (text, tag))
 
     def status(self, text):
         self.emit("status", text)
@@ -347,7 +348,7 @@ def run_lookup(store, cfg, ctx, statuses=("never", "busy"), text=""):
                         retry.append((t, asking))
                     continue
                 why = tr(" ({reasons})", reasons=tr(", ").join(f"{stored_text(s.label)} {tr(reason)}" for s, reason in failed.items())) if status == "busy" else ""
-                ctx.log(tr("{status}{why}: {artist} - {title}", status=tr(LABELS[status]), why=why, artist=t['artist'] or t['album_artist'], title=t['title']))
+                ctx.log(tr("{status}{why}: {artist} - {title}", status=tr(LABELS[status]), why=why, artist=t['artist'] or t['album_artist'], title=t['title']), status)
                 if status == "busy":
                     retry.append((t, failed))  # the other sources already answered, so only these get asked again
                     continue

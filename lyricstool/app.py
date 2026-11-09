@@ -262,6 +262,8 @@ class App:
         wrap = self.card(f)
         wrap.pack(fill="both", expand=True)
         self.log_box = tk.Text(wrap, wrap="word", state="disabled", padx=10, pady=8, font=(FONT, 10), **theme.TEXT)
+        self.log_box.tag_configure("found", foreground=STATE_COLORS["synced"])
+        self.log_box.tag_configure("notfound", foreground=DANGER)
         self.fill_with_scrollbar(self.log_box)
 
     def build_review(self):
@@ -442,7 +444,7 @@ class App:
             while True:
                 kind, payload = self.events.get_nowait()
                 if kind == "log":
-                    self.write_log(payload)
+                    self.write_log(*payload)
                 elif kind == "status":
                     self.status.configure(text=payload)
                 elif kind == "progress":
@@ -511,9 +513,9 @@ class App:
         log.error("UI error", exc_info=(exc, val, tb))
         dialogs.showerror(tr("LyricsBox"), tr("Something went wrong: {e}\nSee the log file for details.", e=val))
 
-    def write_log(self, text):
+    def write_log(self, text, tag=""):
         self.log_box.configure(state="normal")
-        self.log_box.insert("end", time.strftime("%H:%M:%S  ") + text + "\n")
+        self.log_box.insert("end", time.strftime("%H:%M:%S  ") + text + "\n", tag)
         self.log_box.see("end")
         self.log_box.configure(state="disabled")
 

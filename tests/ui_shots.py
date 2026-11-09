@@ -220,6 +220,7 @@ with mock.patch("lyricstool.app.dialogs") as box, mock.patch("lyricstool.app.fil
     check("dismissed one stays out, others in", rows(), 3)
     check("buttons back after the job", str(app.btn_lookup.cget("state")), "normal")
     check("log shows each track", "找到：" in app.log_box.get("1.0", "end"), True)
+    check("found songs are green in the log", bool(app.log_box.tag_ranges("found")), True)
 
     # Writing through the button: asks first, then reports.
     box.askyesno.return_value = False
@@ -363,7 +364,7 @@ with mock.patch("lyricstool.app.dialogs") as box, mock.patch("lyricstool.app.fil
     box.askyesno.side_effect = lambda *a: log_when_asked.append("問題之後的記錄" in app.log_box.get("1.0", "end")) or False
     app.events.put(("limited", "網易雲"))
     app.events.put(("limited", "網易雲"))
-    app.events.put(("log", "問題之後的記錄"))
+    app.events.put(("log", ("問題之後的記錄", "")))
     pump()
     box.askyesno.side_effect = None
     check("rate limit asked about once", box.askyesno.call_count, 1)
@@ -446,7 +447,7 @@ with mock.patch("lyricstool.app.dialogs") as box, mock.patch("lyricstool.app.fil
     app.events.put(("done", (lambda r: 1 / 0, None)))
     pump()
     check("handler error shown", box.showerror.called, True)
-    app.events.put(("log", "still alive"))
+    app.events.put(("log", ("still alive", "")))
     pump()
     check("window still updating", "still alive" in app.log_box.get("1.0", "end"), True)
 
