@@ -18,7 +18,7 @@ shutil.rmtree(scratch, ignore_errors=True)
 data, lib = os.path.join(scratch, "data"), os.path.join(scratch, "music")
 os.makedirs(data)
 os.makedirs(lib)
-exe = shutil.copy(exe, os.path.join(scratch, "LyricsBox.exe"))
+exe = shutil.copy(exe, os.path.join(scratch, "LyricNest.exe"))
 mine = os.path.normcase(os.path.abspath(exe))
 subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "sine=duration=1", "-metadata", "artist=陳綺貞", "-metadata", "title=太陽", os.path.join(lib, "a.flac")], check=True)
 with open(os.path.join(data, "settings.json"), "w", encoding="utf-8") as fh:
@@ -61,7 +61,7 @@ def windows():
 
     @ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
     def visit(hwnd, _):
-        if u.IsWindowVisible(hwnd) and title(hwnd).startswith("LyricsBox") and os.path.normcase(image(hwnd)) == mine:
+        if u.IsWindowVisible(hwnd) and title(hwnd).startswith("LyricNest") and os.path.normcase(image(hwnd)) == mine:
             found.append(hwnd)
         return True
 
@@ -92,17 +92,17 @@ t0 = time.time()
 p = subprocess.Popen([exe], env=env)
 second = None
 try:
-    hwnd = wait_for(lambda t: t != "LyricsBox", 40)
+    hwnd = wait_for(lambda t: t != "LyricNest", 40)
     print("window after", round(time.time() - t0, 1), "s:", bool(hwnd))
     assert hwnd, "no window"
     time.sleep(3)  # let the automatic scan finish
     print("title:", title(hwnd))
-    assert title(hwnd) == f"LyricsBox {__version__}"
+    assert title(hwnd) == f"LyricNest {__version__}"
     save_window(hwnd, os.path.join(scratch, "exe.png"))
 
     second = subprocess.Popen([exe], env=env)
-    notice = wait_for(lambda t: t == "LyricsBox", 25)
-    print("second copy shows a notice:", bool(notice), "| main windows:", sum(title(w) != "LyricsBox" for w in windows()))
+    notice = wait_for(lambda t: t == "LyricNest", 25)
+    print("second copy shows a notice:", bool(notice), "| main windows:", sum(title(w) != "LyricNest" for w in windows()))
     assert notice, "second copy gave no notice"
     u.PostMessageW(notice, 0x0010, 0, 0)
     print("second copy exit:", second.wait(15))

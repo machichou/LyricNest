@@ -24,7 +24,7 @@ from .i18n import stored_text, tr
 from .clean import T2S, fold, has_offset, is_placeholder, last_stamp, sung_lines
 
 S2T = OpenCC("s2t")
-UA = "LyricsBox/1.0 (personal library, slow)"
+UA = "LyricNest/1.0 (personal library, slow)"
 MAX_DIFF = 3
 SUSPEND_SECONDS = 600
 QUICK_RETRY = 5  # seconds; a song can afford this much while the other sources are still answering it

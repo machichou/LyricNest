@@ -1,4 +1,4 @@
-"""Settings and the app's own database, under %LOCALAPPDATA%\\LyricsBox. Music files are never touched here."""
+"""Settings and the app's own database, under %LOCALAPPDATA%\\LyricNest. Music files are never touched here."""
 import hashlib
 import json
 import os
@@ -26,10 +26,12 @@ def data_dir():
         d = os.environ["LYRICSTOOL_DATA"]
     else:
         base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-        d, old = os.path.join(base, "LyricsBox"), os.path.join(base, "LyricsTool")
-        if not os.path.exists(d) and os.path.isdir(old):
+        d = os.path.join(base, "LyricNest")
+        # the program was called LyricsTool before 1.13 and LyricsBox before 1.14; its settings and lookup history carry over
+        old = next((p for p in (os.path.join(base, "LyricsBox"), os.path.join(base, "LyricsTool")) if os.path.isdir(p)), None)
+        if not os.path.exists(d) and old:
             try:
-                os.rename(old, d)  # the program was called LyricsTool before 1.13; its settings and lookup history carry over
+                os.rename(old, d)
             except OSError:  # a copy of the old version still running holds it; keep using it and move it next time
                 d = old
     os.makedirs(d, exist_ok=True)

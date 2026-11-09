@@ -52,7 +52,7 @@ def selftest(out):
     r["tk"] = bool(tk.font.families())
     root.destroy()
     try:
-        req = urllib.request.Request("https://lrclib.net/api/get?artist_name=TV+Girl&track_name=Not+Allowed&album_name=&duration=0", headers={"User-Agent": "LyricsBox selftest"})
+        req = urllib.request.Request("https://lrclib.net/api/get?artist_name=TV+Girl&track_name=Not+Allowed&album_name=&duration=0", headers={"User-Agent": "LyricNest selftest"})
         try:
             urllib.request.urlopen(req, timeout=20).read()
             r["https"] = True
@@ -81,7 +81,7 @@ def main():
     if lock is None:
         root.withdraw()
         theme.apply(root, root.winfo_fpixels("1i") / 96)
-        dialogs.showinfo(tr("LyricsBox"), tr("LyricsBox is already running."))
+        dialogs.showinfo(tr("LyricNest"), tr("LyricNest is already running."))
         return
     from lyricstool import jobs
     from lyricstool.app import App

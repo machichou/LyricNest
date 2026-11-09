@@ -151,12 +151,12 @@ check("buttons beside the paths say browse", [b.cget("text") for b in buttons_in
 # The real dialogs.
 for label, want in (("是", True), ("否", False)):
     answer(label)
-    check(f"question answered with {label}", dialogs.askyesno("LyricsBox", "確定要寫入 3 首歌曲嗎？"), want)
+    check(f"question answered with {label}", dialogs.askyesno("LyricNest", "確定要寫入 3 首歌曲嗎？"), want)
 for label, want in (("取消", False), ("關閉備份", True)):
     answer(label, "7_backup_risk" if label == "取消" else None)
     check(f"risk answered with {label}", dialogs.confirm_risk("關閉備份", BACKUP_RISK, "關閉備份"), want)
 answer("確定")
-dialogs.showinfo("LyricsBox", "完成")
+dialogs.showinfo("LyricNest", "完成")
 check("no dialog left open", [w for w in root.winfo_children() if isinstance(w, tk.Toplevel)], [])
 
 with mock.patch("lyricstool.app.dialogs") as box, mock.patch("lyricstool.app.filedialog") as files:

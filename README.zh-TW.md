@@ -1,6 +1,6 @@
 <div align="center">
 
-# LyricsBox
+# LyricNest
 
 **整個音樂庫的同步歌詞，6 個免費來源同時查。**
 
@@ -24,7 +24,7 @@
 
 ---
 
-很多音樂軟體只顯示內嵌在檔案裡的歌詞。LyricsBox 會替沒有歌詞的歌找到同步歌詞，整理乾淨，你看過之後再寫進檔案。單一 `.exe`，不需安裝。
+很多音樂軟體只顯示內嵌在檔案裡的歌詞。LyricNest 會替沒有歌詞的歌找到同步歌詞，整理乾淨，你看過之後再寫進檔案。單一 `.exe`，不需安裝。
 
 ## 功能
 
@@ -110,12 +110,12 @@ flowchart TD
 
 ## 開始使用
 
-1. 從 [Releases](../../releases) 下載 `LyricsBox.exe` 並執行。
+1. 從 [Releases](../../releases) 下載 `LyricNest.exe` 並執行。
 2. **設定**：選擇音樂資料夾和備份資料夾，按「儲存設定」。
 3. **查詢歌詞**：按「開始查詢」。
 4. **審閱與寫入**：取消勾選不對的，再按「備份並寫入」。
 
-設定和查詢紀錄存在 `%LOCALAPPDATA%\LyricsBox`。
+設定和查詢紀錄存在 `%LOCALAPPDATA%\LyricNest`。
 
 ## 開發
 

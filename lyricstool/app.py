@@ -65,7 +65,7 @@ class App:
         self.started = 0.0
         self.warned = set()
         self.review_rows = []
-        root.title(f"{tr('LyricsBox')} {__version__}")
+        root.title(f"{tr('LyricNest')} {__version__}")
         self.scale = root.winfo_fpixels("1i") / 96
         width = min(self.px(1180), root.winfo_screenwidth() - 40)
         height = min(self.px(760), root.winfo_screenheight() - 100)
@@ -97,7 +97,7 @@ class App:
     # ---- layout ----
     def build(self):
         self.v_backup = tk.BooleanVar(value=self.cfg["backup_enabled"])  # one setting, ticked from either the review page or the settings page
-        ttk.Label(self.root, text=tr("LyricsBox"), style="Heading.TLabel").pack(anchor="w", padx=self.px(24), pady=(self.px(16), self.px(10)))
+        ttk.Label(self.root, text=tr("LyricNest"), style="Heading.TLabel").pack(anchor="w", padx=self.px(24), pady=(self.px(16), self.px(10)))
         bar = ttk.Frame(self.root, padding=(self.px(24), self.px(10)))
         bar.pack(side="bottom", fill="x")  # before the tabs, so a small window squeezes them and not this
         tk.Frame(self.root, height=1, bg=LINE).pack(side="bottom", fill="x")
@@ -340,7 +340,7 @@ class App:
         f = self.tab_settings
         top = ttk.Frame(f)
         top.pack(fill="x", pady=(0, self.px(14)))
-        ttk.Label(top, text=tr("LyricsBox {version}   by {author}   built with help from Claude", version=__version__, author=__author__), style="Muted.TLabel").pack(side="left")
+        ttk.Label(top, text=tr("LyricNest {version}   by {author}   built with help from Claude", version=__version__, author=__author__), style="Muted.TLabel").pack(side="left")
         ttk.Button(top, text=tr("Save settings"), style="Accent.TButton", command=self.save_settings).pack(side="right")
         ttk.Button(top, text=tr("Open log folder"), command=lambda: os.startfile(os.path.dirname(self.store.path))).pack(side="right", padx=self.px(8))
         self.v_lang = tk.StringVar(value=i18n.LANGUAGES[i18n.LANG])  # at the top, where a small window cannot squeeze it out of view
@@ -409,7 +409,7 @@ class App:
     # ---- background jobs ----
     def start(self, name, fn, done=None):
         if self.thread and self.thread.is_alive():
-            dialogs.showinfo(tr("LyricsBox"), tr("A job is running. Wait for it to finish, or click Stop first."))
+            dialogs.showinfo(tr("LyricNest"), tr("A job is running. Wait for it to finish, or click Stop first."))
             return False
         ctx = jobs.Ctx(lambda kind, payload: self.events.put((kind, payload)))
         self.ctx, self.started, self.warned = ctx, time.monotonic(), set()
@@ -462,7 +462,7 @@ class App:
                     self.write_log(payload)
                     self.refresh_all()
                     if not self.closing:
-                        dialogs.showerror(tr("LyricsBox"), payload)
+                        dialogs.showerror(tr("LyricNest"), payload)
                     self.finish_close()
                 if self.closed:
                     return
@@ -496,7 +496,7 @@ class App:
 
     def on_close(self):
         if self.thread and self.thread.is_alive():
-            if not dialogs.askyesno(tr("LyricsBox"), tr("A job is running. Stop it and close?\nWhat is done so far is kept.")):
+            if not dialogs.askyesno(tr("LyricNest"), tr("A job is running. Stop it and close?\nWhat is done so far is kept.")):
                 return
             self.closing = True
             self.stop()
@@ -511,7 +511,7 @@ class App:
 
     def on_ui_error(self, exc, val, tb):
         log.error("UI error", exc_info=(exc, val, tb))
-        dialogs.showerror(tr("LyricsBox"), tr("Something went wrong: {e}\nSee the log file for details.", e=val))
+        dialogs.showerror(tr("LyricNest"), tr("Something went wrong: {e}\nSee the log file for details.", e=val))
 
     def write_log(self, text, tag=""):
         self.log_box.configure(state="normal")
@@ -541,7 +541,7 @@ class App:
     def lookup(self):
         st = self.statuses()
         if not st:
-            dialogs.showinfo(tr("LyricsBox"), tr("Tick at least one kind of song to look up."))
+            dialogs.showinfo(tr("LyricNest"), tr("Tick at least one kind of song to look up."))
             return
         text = self.v_filter.get().strip()
         self.start(tr("Look Up Lyrics"), lambda ctx: jobs.run_lookup(self.store, self.cfg, ctx, st, text), self.after_lookup)
@@ -553,7 +553,7 @@ class App:
     def write(self):
         items = self.store.selected_items()
         if not items:
-            dialogs.showinfo(tr("LyricsBox"), tr("No songs are ticked for writing."))
+            dialogs.showinfo(tr("LyricNest"), tr("No songs are ticked for writing."))
             return
         flagged = sum(1 for i in items if json.loads(i["flags"]))
         on = self.cfg["backup_enabled"]
@@ -573,14 +573,14 @@ class App:
     def restore(self, only_selected):
         sel = self.batch_tree.selection()
         if not sel:
-            dialogs.showinfo(tr("LyricsBox"), tr("Select a backup batch first."))
+            dialogs.showinfo(tr("LyricNest"), tr("Select a backup batch first."))
             return
         folder = sel[0]
         paths = None
         if only_selected:
             paths = set(self.batch_files.selection())
             if not paths:
-                dialogs.showinfo(tr("LyricsBox"), tr("Select the files to restore on the right first."))
+                dialogs.showinfo(tr("LyricNest"), tr("Select the files to restore on the right first."))
                 return
         n = len(paths) if paths else len(self.batch_files.get_children())
         if dialogs.askyesno(tr("Restore"), tr("Restore these songs ({n}) to how they were before this batch was written?", n=n)):
@@ -590,15 +590,15 @@ class App:
     def copy_alias_prompt(self):
         text, n = jobs.alias_prompt(self.store.artists(), parse_aliases(self.alias_box.get("1.0", "end")))
         if not n:
-            dialogs.showinfo(tr("LyricsBox"), tr("Every artist in the library already has aliases."))
+            dialogs.showinfo(tr("LyricNest"), tr("Every artist in the library already has aliases."))
             return
         self.root.clipboard_clear()
         self.root.clipboard_append(text)
-        dialogs.showinfo(tr("LyricsBox"), tr("Prompt copied. It lists the artists without aliases ({n}).\n\nPaste it into the AI you use (ChatGPT or Claude, say), paste each line of its reply into Artist aliases below, then click Save settings.", n=n))
+        dialogs.showinfo(tr("LyricNest"), tr("Prompt copied. It lists the artists without aliases ({n}).\n\nPaste it into the AI you use (ChatGPT or Claude, say), paste each line of its reply into Artist aliases below, then click Save settings.", n=n))
 
     def save_settings(self):
         if self.thread and self.thread.is_alive():
-            dialogs.showinfo(tr("LyricsBox"), tr("A job is running. Wait for it to finish, or click Stop, before saving settings."))
+            dialogs.showinfo(tr("LyricNest"), tr("A job is running. Wait for it to finish, or click Stop, before saving settings."))
             return
         aliases = parse_aliases(self.alias_box.get("1.0", "end"))
         new = dict(self.cfg)
@@ -610,10 +610,10 @@ class App:
         new["skip_albums"] = self.v_skip_albums.get()
         new["aliases"] = aliases
         if not os.path.isdir(new["library"]):
-            dialogs.showerror(tr("LyricsBox"), tr("Music folder not found."))
+            dialogs.showerror(tr("LyricNest"), tr("Music folder not found."))
             return
         if new["backup_enabled"] and not new["backup_root"]:
-            dialogs.showerror(tr("LyricsBox"), tr("Set a backup folder."))
+            dialogs.showerror(tr("LyricNest"), tr("Set a backup folder."))
             return
         changed = new["library"] != self.cfg["library"] or new["excluded"] != self.cfg["excluded"]
         rescan = changed or new["remove_credits"] != self.cfg["remove_credits"]  # a scan also adds or withdraws the cleanup suggestions
@@ -627,7 +627,7 @@ class App:
         if rescan:
             self.scan()
         else:
-            dialogs.showinfo(tr("LyricsBox"), tr("Settings saved."))
+            dialogs.showinfo(tr("LyricNest"), tr("Settings saved."))
 
     def on_backup_switch(self):
         """Takes effect at once, unlike the rest of the settings page: beside the write button, a tick has to mean what it shows."""
@@ -644,7 +644,7 @@ class App:
         if lang != self.cfg["language"]:
             self.cfg["language"] = lang
             save_config(self.cfg)
-            dialogs.showinfo(tr("LyricsBox"), tr("The new language is used from the next time LyricsBox starts."))
+            dialogs.showinfo(tr("LyricNest"), tr("The new language is used from the next time LyricNest starts."))
 
     def pick(self, key, kind):
         p = filedialog.askdirectory() if kind == "dir" else filedialog.askopenfilename()

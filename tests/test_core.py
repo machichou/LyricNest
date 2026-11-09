@@ -542,16 +542,18 @@ class Files(unittest.TestCase):
         self.assertEqual(cfg["backup_root"], os.path.join(self.d, "backups"))
         self.assertTrue(cfg["backup_enabled"])
 
-    def test_data_from_before_the_rename_carries_over(self):
-        old = os.path.join(self.d, "LyricsTool")
-        os.makedirs(old)
-        open(os.path.join(old, "settings.json"), "w").close()
+    def test_data_from_before_the_renames_carries_over(self):
         env = {k: v for k, v in os.environ.items() if k != "LYRICSTOOL_DATA"}
-        with mock.patch.dict(os.environ, dict(env, LOCALAPPDATA=self.d), clear=True):
-            self.assertEqual(data_dir(), os.path.join(self.d, "LyricsBox"))
+        for name in ("LyricsTool", "LyricsBox"):
+            base = os.path.join(self.d, name + "_era")
+            old = os.path.join(base, name)
             os.makedirs(old)
-            self.assertEqual(data_dir(), os.path.join(self.d, "LyricsBox"), "an old folder made later is left alone")
-        self.assertTrue(os.path.exists(os.path.join(self.d, "LyricsBox", "settings.json")))
+            open(os.path.join(old, "settings.json"), "w").close()
+            with mock.patch.dict(os.environ, dict(env, LOCALAPPDATA=base), clear=True):
+                self.assertEqual(data_dir(), os.path.join(base, "LyricNest"), name)
+                os.makedirs(old)
+                self.assertEqual(data_dir(), os.path.join(base, "LyricNest"), "an old folder made later is left alone")
+            self.assertTrue(os.path.exists(os.path.join(base, "LyricNest", "settings.json")), name)
 
     def track(self, store, name):
         return store.db.execute("select *, 0 status from tracks where path=?", (os.path.join(self.lib, name),)).fetchone()
